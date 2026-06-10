@@ -1,0 +1,18 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = [
+  "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"LIBERO_evaluation/*.py" = ["E402"]
+"MetaWorld_evaluation/*.py" = ["E402"]
+"Evo_1/scripts/*.py" = ["E402"]

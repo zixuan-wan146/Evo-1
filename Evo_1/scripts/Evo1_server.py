@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+from contextlib import nullcontext
 import json
 import logging
 import sys
@@ -31,7 +32,15 @@ from model.evo1 import EVO1
 from utils.normalization import NormalizationStats
 
 
+def resolve_device(device: str) -> torch.device:
+    resolved = torch.device(device)
+    if resolved.type == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError(f"Requested device '{device}', but CUDA is not available.")
+    return resolved
+
+
 def load_model_and_normalizer(ckpt_dir, device: str = "cuda", inference_steps: int = 32):
+    device = resolve_device(device)
     ckpt_dir = Path(ckpt_dir)
     config_path = ckpt_dir / "config.json"
     stats_path = ckpt_dir / "norm_stats.json"
@@ -46,7 +55,7 @@ def load_model_and_normalizer(ckpt_dir, device: str = "cuda", inference_steps: i
     with open(stats_path, "r") as f:
         stats = json.load(f)
 
-    config["device"] = device
+    config["device"] = str(device)
     config["finetune_vlm"] = False
     config["finetune_action_head"] = False
     config["num_inference_timesteps"] = inference_steps
@@ -82,10 +91,18 @@ def pad_state_tensor(state: torch.Tensor, target_dim: int = TARGET_STATE_DIM) ->
 def infer_from_json_dict(data: dict, model, normalizer):
     device = next(model.parameters()).device
 
+    required_fields = ("image", "state", "image_mask", "action_mask")
+    missing_fields = [field for field in required_fields if field not in data]
+    if missing_fields:
+        raise ValueError(f"Missing required request fields: {missing_fields}")
+
     images = [decode_image_from_list(img, device) for img in data["image"]]
-    assert len(images) == MAX_VIEWS, f"Must provide exactly {MAX_VIEWS} images."
+    if len(images) != MAX_VIEWS:
+        raise ValueError(f"Must provide exactly {MAX_VIEWS} images, got {len(images)}.")
     for img in images:
-        assert img.shape == (3, IMAGE_SIZE, IMAGE_SIZE), f"image_size must be (3,{IMAGE_SIZE},{IMAGE_SIZE})"
+        expected_shape = (3, IMAGE_SIZE, IMAGE_SIZE)
+        if tuple(img.shape) != expected_shape:
+            raise ValueError(f"image_size must be {expected_shape}, got {tuple(img.shape)}")
 
     state = torch.tensor(data["state"], dtype=torch.float32, device=device)
     norm_state = normalizer.normalize_state(pad_state_tensor(state)).to(dtype=torch.float32)
@@ -98,7 +115,12 @@ def infer_from_json_dict(data: dict, model, normalizer):
         device=device,
     )
 
-    with torch.no_grad() and torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+    autocast_context = (
+        torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16)
+        if device.type == "cuda"
+        else nullcontext()
+    )
+    with torch.no_grad(), autocast_context:
         action = model.run_inference(
             images=images,
             image_mask=image_mask,
@@ -115,11 +137,15 @@ async def handle_request(websocket, model, normalizer):
     logging.info("Client connected")
     try:
         async for message in websocket:
-            json_data = json.loads(message)
-            logging.info("Received JSON observation")
-            actions = infer_from_json_dict(json_data, model, normalizer)
-            await websocket.send(json.dumps(actions))
-            logging.info("Sent action chunk")
+            try:
+                json_data = json.loads(message)
+                logging.info("Received JSON observation")
+                actions = infer_from_json_dict(json_data, model, normalizer)
+                await websocket.send(json.dumps(actions))
+                logging.info("Sent action chunk")
+            except Exception as exc:
+                logging.exception("Failed to handle request")
+                await websocket.send(json.dumps({"error": str(exc)}))
     except websockets.exceptions.ConnectionClosed:
         logging.info("Client disconnected.")
 

@@ -194,6 +194,7 @@ class SimulationDataset(Dataset):
             T.ColorJitter(brightness=0.3, contrast=0.4, saturation=0.5, hue=0.08),
             T.ToTensor()
         ])
+        self.max_sample_retries = 10
 
     def _load_metadata(self):
      
@@ -317,6 +318,8 @@ class SimulationDataset(Dataset):
     ) -> (torch.Tensor, torch.Tensor):
 
         source_dim = source_tensor.shape[-1]
+        if source_dim > max_dim:
+            raise ValueError(f"source tensor dimension {source_dim} exceeds configured max_dim {max_dim}")
         
         if source_tensor.dim() > 1:
             padded_shape = (*source_tensor.shape[:-1], max_dim)
@@ -396,16 +399,23 @@ class SimulationDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
+        if len(self.data) == 0:
+            raise IndexError("SimulationDataset is empty")
+        last_error = None
+        for attempt in range(self.max_sample_retries):
+            sample_idx = idx if attempt == 0 else random.randint(0, len(self.data) - 1)
+            try:
+                return self._load_sample(sample_idx)
+            except (OSError, EOFError, pickle.PickleError, RuntimeError, ValueError, KeyError, TypeError) as e:
+                last_error = e
+                logging.info(f"Skipping sample {sample_idx}: {e}")
+        raise RuntimeError(f"Failed to load a valid sample after {self.max_sample_retries} attempts") from last_error
 
+    def _load_sample(self, idx):
         cache_filepath = self.data[idx]
         
-        try:
-            with open(cache_filepath, 'rb') as f:
-                item = pickle.load(f)
-        except Exception as e:
-            logging.info(f"cannot load cache file {cache_filepath}: {str(e)}")
-            
-            return self[random.randint(0, len(self.data)-1)]
+        with open(cache_filepath, 'rb') as f:
+            item = pickle.load(f)
  
         
         arm_key = item["arm_key"]
@@ -413,12 +423,7 @@ class SimulationDataset(Dataset):
         embodiment_id = self.arm_to_embodiment_id[arm_key]
 
  
-        try:
-            frames = self._load_video_frame(item["video_paths"], item["timestamp"])
-        except Exception as e:
-      
-            logging.info(f"skipping sample that cannot decode video {self.data[idx]}: {e}")
-            return self[random.randint(0, len(self.data)-1)]  
+        frames = self._load_video_frame(item["video_paths"], item["timestamp"])
 
         images = frames
 

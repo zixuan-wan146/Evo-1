@@ -1,6 +1,7 @@
 import sys
 import os
 import math
+from contextlib import nullcontext
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -32,6 +33,41 @@ def get_with_warning(config: dict, key: str, default):
     else:
         warnings.warn(f"'{key}' not found in config, using default: {default!r}")
         return default
+
+
+def validate_training_config(config: dict):
+    dataset_config_path = config.get("dataset_config_path")
+    if not dataset_config_path:
+        raise ValueError("--dataset_config_path is required")
+    if not Path(dataset_config_path).exists():
+        raise FileNotFoundError(f"Dataset config file not found: {dataset_config_path}")
+
+    max_steps = int(config.get("max_steps", 0))
+    if max_steps <= 0:
+        raise ValueError(f"--max_steps must be positive, got {max_steps}")
+
+    for key in ("log_interval", "ckpt_interval", "batch_size", "horizon", "per_action_dim", "state_dim"):
+        value = int(config.get(key, 0))
+        if value <= 0:
+            raise ValueError(f"--{key} must be positive, got {value}")
+
+    device = str(config.get("device", "cuda"))
+    if device.startswith("cuda") and not torch.cuda.is_available():
+        raise RuntimeError(f"Requested device '{device}', but CUDA is not available.")
+
+    resume = bool(config.get("resume", False))
+    resume_path = config.get("resume_path")
+    if resume != bool(resume_path):
+        raise ValueError("Inconsistent resume configuration: --resume and --resume_path must be set together.")
+    if resume and not Path(resume_path).exists():
+        raise FileNotFoundError(f"Resume checkpoint path not found: {resume_path}")
+
+
+def get_autocast_context(device):
+    device_type = torch.device(device).type
+    if device_type == "cuda":
+        return torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16)
+    return nullcontext()
 
 
 def inspect_named_submodules(module_dict: dict, verbose: bool = True):
@@ -172,6 +208,9 @@ def prepare_dataloader(dataset, config: dict) -> DataLoader:
     batch_size = get_with_warning(config, "batch_size", 8)
     num_workers = get_with_warning(config, "num_workers", 8)
 
+    if len(dataset) == 0:
+        raise ValueError("Dataset is empty. Check dataset_config_path and source data paths.")
+
     dataloader = DataLoader(
         dataset,
         batch_size=batch_size,
@@ -182,6 +221,10 @@ def prepare_dataloader(dataset, config: dict) -> DataLoader:
         drop_last=True,
         collate_fn=custom_collate_fn
     )
+    if len(dataloader) == 0:
+        raise ValueError(
+            f"Dataloader has no batches. Dataset size={len(dataset)}, batch_size={batch_size}, drop_last=True."
+        )
     if accelerator is None or accelerator.is_main_process:
         logging.info(f"Initialized dataloader with batch size {batch_size}")
     return dataloader
@@ -215,6 +258,11 @@ def log_training_step(step, loss, total_norm, clipped_norm, scheduler, dataloade
         })
 
 def save_checkpoint(save_dir, step, model_engine, loss, accelerator, config=None, norm_stats=None):
+    if not hasattr(model_engine, "save_checkpoint"):
+        raise RuntimeError(
+            "Checkpoint saving requires a DeepSpeed-prepared model. "
+            "Launch with accelerate and a DeepSpeed config, as shown in README.md."
+        )
     tag = f"step_{step}"
     checkpoint_dir = os.path.join(save_dir, tag)
 
@@ -254,6 +302,11 @@ def save_checkpoint(save_dir, step, model_engine, loss, accelerator, config=None
         logging.info(f"[Rank {accelerator.process_index}] Saved checkpoint to {checkpoint_dir}")
 
 def load_checkpoint_with_deepspeed(model_engine, load_dir, accelerator, tag="step_best", load_optimizer_states=True, resume_pretrain=False):
+    if not hasattr(model_engine, "load_checkpoint"):
+        raise RuntimeError(
+            "Checkpoint resume requires a DeepSpeed-prepared model. "
+            "Launch with accelerate and a DeepSpeed config, as shown in README.md."
+        )
 
     try:
         load_path, client_state = model_engine.load_checkpoint(
@@ -327,6 +380,7 @@ def build_param_groups(model, wd):
             {"params": no_decay, "weight_decay": 0.0}]
 
 def train(config):
+    validate_training_config(config)
 
 
     # === Set logging ===
@@ -361,6 +415,11 @@ def train(config):
 
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
     model_engine = model  
+    if not hasattr(model_engine, "save_checkpoint"):
+        raise RuntimeError(
+            "This training script currently expects DeepSpeed checkpoint support. "
+            "Use `accelerate launch --deepspeed_config_file ds_config.json ...`."
+        )
   
     if accelerator.is_main_process:
         logging.info("Initialized with Accelerate")
@@ -387,9 +446,6 @@ def train(config):
     resume_path = get_with_warning(config, "resume_path", None)
     resume_pretrain = get_with_warning(config, "resume_pretrain", False)
 
-    if resume != bool(resume_path):
-        raise ValueError("Inconsistent resume configuration: --resume and --resume_path must be set together.")
-    
     if resume:
         resume_path = resume_path.rstrip("/")
         resume_dir, resume_tag = os.path.split(resume_path)
@@ -445,13 +501,20 @@ def train(config):
             
             fused_tokens = torch.cat(fused_tokens_list, dim=0)
 
-            with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+            with get_autocast_context(accelerator.device):
 
-                pred_velocity, noise = model(fused_tokens, state=states, actions_gt=actions_gt, action_mask=action_mask)
+                pred_velocity, noise = model(
+                    fused_tokens,
+                    state=states,
+                    actions_gt=actions_gt,
+                    action_mask=action_mask,
+                    embodiment_ids=embodiment_ids,
+                )
                 
             target_velocity = (actions_gt - noise).view(actions_gt.shape[0], -1)
             
-            assert pred_velocity.shape == target_velocity.shape
+            if pred_velocity.shape != target_velocity.shape:
+                raise ValueError(f"pred_velocity shape {pred_velocity.shape} != target_velocity shape {target_velocity.shape}")
 
             if action_mask.sum() == 0:
                 raise ValueError(f"[Step {step}] action_mask.sum() is 0! All actions are masked. "
@@ -475,7 +538,7 @@ def train(config):
                 pred_velocity=pred_velocity,
                 loss=loss
             ):
-                continue
+                raise FloatingPointError(f"Non-finite tensor detected at step {step}")
 
             # === Backward and optimizer step ===
             optimizer.zero_grad(set_to_none=True)

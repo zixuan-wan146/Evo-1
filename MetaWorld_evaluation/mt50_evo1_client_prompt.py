@@ -13,8 +13,44 @@ import random
 
 import datetime
 
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None or value == "":
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    return default if value is None or value == "" else int(value)
+
+
+def _env_float(name: str, default: float) -> float:
+    value = os.getenv(name)
+    return default if value is None or value == "" else float(value)
+
+
+def _env_optional_int(name: str, default: Optional[int]) -> Optional[int]:
+    value = os.getenv(name)
+    if value is None or value == "":
+        return default
+    if value.lower() in {"none", "null"}:
+        return None
+    return int(value)
+
+
+def _env_optional_int_list(name: str, default: Optional[List[int]]) -> Optional[List[int]]:
+    value = os.getenv(name)
+    if value is None or value == "":
+        return default
+    if value.lower() in {"none", "null"}:
+        return None
+    return [int(item.strip()) for item in value.split(",") if item.strip()]
+
+
 # ===================== Logging =====================
-LOG_DIR = "logs"
+LOG_DIR = os.getenv("EVO1_MT50_LOG_DIR", "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 
 def make_log_path(prefix="eval"):
@@ -24,50 +60,51 @@ def make_log_path(prefix="eval"):
 LOG_PATH = make_log_path("mt50")
 # ====================================================
 
-SHOW_WINDOW = True
-SAVE_IMAGE = False
-SAVE_VIDEO = True  # save the video of each episode to disk
+SHOW_WINDOW = _env_bool("EVO1_MT50_SHOW_WINDOW", True)
+SAVE_IMAGE = _env_bool("EVO1_MT50_SAVE_IMAGE", False)
+SAVE_VIDEO = _env_bool("EVO1_MT50_SAVE_VIDEO", True)  # save the video of each episode to disk
 
 # ===================== Debug image saving =====================
-INSPECT_SAMPLE_PER_EPISODE = True        
-INSPECT_DIR = "inspect_frames"           
-APPLY_ROT_180 = True                     
-APPLY_CENTER_CROP = True                 
-CROP_KEEP_RATIO = 2/3                    
-INSPECT_SAVE_STEP_TAG = True             
+INSPECT_SAMPLE_PER_EPISODE = _env_bool("EVO1_MT50_INSPECT_SAMPLE_PER_EPISODE", True)
+INSPECT_DIR = os.getenv("EVO1_MT50_INSPECT_DIR", "inspect_frames")
+APPLY_ROT_180 = _env_bool("EVO1_MT50_APPLY_ROT_180", True)
+APPLY_CENTER_CROP = _env_bool("EVO1_MT50_APPLY_CENTER_CROP", True)
+CROP_KEEP_RATIO = _env_float("EVO1_MT50_CROP_KEEP_RATIO", 2 / 3)
+INSPECT_SAVE_STEP_TAG = _env_bool("EVO1_MT50_INSPECT_SAVE_STEP_TAG", True)
 # =============================================================
 
 # ===================== Debug video saving ====================
-VIDEO_SAVE_DIR = "episode_videos"
-VIDEO_FPS = 10  # Original writing frame rate (used to control playback speed; the smaller the value, the slower the playback).
-VIDEO_DUP_FRAMES = 1  # Number of times to duplicate each frame when writing video (used to control playback speed; the larger the value, the slower the playback).
+VIDEO_SAVE_DIR = os.getenv("EVO1_MT50_VIDEO_DIR", "episode_videos")
+VIDEO_FPS = _env_int("EVO1_MT50_VIDEO_FPS", 10)
+VIDEO_DUP_FRAMES = _env_int("EVO1_MT50_VIDEO_DUP_FRAMES", 1)
 # =============================================================
 
 
 # ===================== User Config (edit here) =====================
-SERVER_URL = "ws://127.0.0.1:9000"
+SERVER_URL = os.getenv("EVO1_SERVER_URI", os.getenv("EVO1_MT50_SERVER_URL", "ws://127.0.0.1:9000"))
+MAX_MESSAGE_SIZE = _env_int("EVO1_MAX_MESSAGE_SIZE", 100_000_000)
 
 # Camera & image settings
-CAMERA_NAME = "corner2"        
+CAMERA_NAME = os.getenv("EVO1_MT50_CAMERA_NAME", "corner2")
 IMG_SIZE = (448, 448)          
 
 # Evo1 & rollout settings
-STATE_TAKE = 8                
-HORIZON = 15                  
-EPISODES = 10                  
-EPISODE_HORIZON = 400          
-SEED = 4042
+STATE_TAKE = _env_int("EVO1_MT50_STATE_TAKE", 8)
+HORIZON = _env_int("EVO1_MT50_HORIZON", 15)
+EPISODES = _env_int("EVO1_MT50_EPISODES", 10)
+EPISODE_HORIZON = _env_int("EVO1_MT50_EPISODE_HORIZON", 400)
+SEED = _env_int("EVO1_MT50_SEED", 4042)
 
-TARGET_LEVEL = "all"   # one of "all", "easy", "medium", "hard", "very_hard"
+TARGET_LEVEL = os.getenv("EVO1_MT50_TARGET_LEVEL", "all")   # one of "all", "easy", "medium", "hard", "very_hard"
 
 # Order source
-ORDER_JSON_PATH = "mt50_order.json"      
+ORDER_JSON_PATH = os.getenv("EVO1_MT50_ORDER_JSON_PATH", "mt50_order.json")
 
-FALLBACK_USE_FIRST_N: Optional[int] = 5
-FALLBACK_IDX_LIST: Optional[List[int]] = None
+FALLBACK_USE_FIRST_N: Optional[int] = _env_optional_int("EVO1_MT50_FALLBACK_USE_FIRST_N", 5)
+FALLBACK_IDX_LIST: Optional[List[int]] = _env_optional_int_list("EVO1_MT50_FALLBACK_IDX_LIST", None)
 
 # Prompt source
-TASKS_JSONL_PATH = "tasks.jsonl"         
+TASKS_JSONL_PATH = os.getenv("EVO1_MT50_TASKS_JSONL_PATH", "tasks.jsonl")
 # ==================================================================
 
 # Headless GL by default; switch to 'glfw' on a desktop if you want
@@ -323,7 +360,7 @@ async def eval_mt50_with_groups(server_url: str,
     group_trials  = {k: 0 for k in ["easy", "medium", "hard", "very_hard"]}
 
     # 4) Main loop
-    async with websockets.connect(server_url, max_size=100_000_000) as ws:
+    async with websockets.connect(server_url, max_size=MAX_MESSAGE_SIZE) as ws:
         for idx in ordered_indices:
             sub = envs.envs[idx]
             slug = idx_to_slug.get(idx, f"task-{idx}")

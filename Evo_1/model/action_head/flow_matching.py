@@ -160,6 +160,7 @@ class FlowmatchingActionHead(nn.Module):
             hidden_dim = getattr(config, "hidden_dim", hidden_dim)
             action_dim = getattr(config, "action_dim", action_dim)
             horizon = getattr(config, "horizon", horizon)
+            per_action_dim = getattr(config, "per_action_dim", per_action_dim)
             num_heads = getattr(config, "num_heads", num_heads)
             num_layers = getattr(config, "num_layers", num_layers)
             dropout = getattr(config, "dropout", dropout)
@@ -170,13 +171,18 @@ class FlowmatchingActionHead(nn.Module):
             from types import SimpleNamespace
             self.config = SimpleNamespace(embed_dim=embed_dim, hidden_dim=hidden_dim,
                                           action_dim=action_dim, horizon=horizon,
+                                          per_action_dim=per_action_dim,
                                           num_heads=num_heads, num_layers=num_layers,
                                           dropout=dropout, num_inference_timesteps=num_inference_timesteps,
                                           num_categories=num_categories)
+        if action_dim != horizon * per_action_dim:
+            raise ValueError(
+                f"action_dim ({action_dim}) must equal horizon ({horizon}) * per_action_dim ({per_action_dim})"
+            )
         self.embed_dim = embed_dim
         self.horizon = horizon
-        self.per_action_dim = config.per_action_dim
-        self.action_dim = config.action_dim
+        self.per_action_dim = per_action_dim
+        self.action_dim = action_dim
 
 
         self.time_pos_enc = SinusoidalPositionalEncoding(embed_dim, max_len=1000)
