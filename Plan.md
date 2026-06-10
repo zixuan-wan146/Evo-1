@@ -14,9 +14,9 @@
   - `User root`
   - `IdentityFile /home/myser/.ssh/id_ed25519_autodl`
 - GitHub 推送状态：
-  - 本地提交已完成，但本地 `main` 仍领先 `origin/main` 37 个提交。
-  - 最新本地提交主题：`Check LIBERO profiles in repository gate`。
-  - 最新未推送补丁包：`exports/unpushed_commits_20260610T192000Z`。
+  - 本地提交已完成，但本地 `main` 仍领先 `origin/main` 38 个提交。
+  - 最新本地提交主题：`Plan LIBERO runs`。
+  - 最新未推送补丁包：`exports/unpushed_commits_20260610T192500Z`。
   - `git push origin main` 失败，原因是当前凭据 `myserendipity137` 没有 `zixuan-wan146/Evo-1.git` 写权限。
   - 需要给该账号写权限，或提供有权限的新 remote。
 - 服务器状态：
@@ -66,6 +66,7 @@
 - `Index LIBERO reports`（本轮新增，报告目录生成可交接 README 索引）
 - `Add LIBERO run profiles`（本轮新增，用安全 `.env` profile 固化 smoke/full-eval 配置）
 - `Check LIBERO profiles in repository gate`（本轮新增，`scripts/check_repo.sh` dry-run 校验默认 profile）
+- `Plan LIBERO runs`（本轮新增，生成 server/eval/validate/report 命令清单）
 
 服务器对应提交：
 
@@ -75,7 +76,7 @@
 - `Complete LIBERO remote smoke setup`（服务器本轮新增，内容与本地等价）
 
 服务器提交哈希不同是因为通过 `git format-patch | git am` 应用，内容等价但提交对象不同。
-最新一次 `git push origin main` 在提交 `Check LIBERO profiles in repository gate` 后仍失败：当前 GitHub 凭据 `myserendipity137` 对 `zixuan-wan146/Evo-1.git` 没有写权限。
+最新一次 `git push origin main` 在提交 `Plan LIBERO runs` 后仍失败：当前 GitHub 凭据 `myserendipity137` 对 `zixuan-wan146/Evo-1.git` 没有写权限。
 
 ## 已完成的工程改造
 
@@ -201,6 +202,7 @@
 - 新增 LIBERO metric gate 说明，可用绝对阈值和 baseline 回归容忍度检查候选结果。
 - 新增 LIBERO run report 说明，可一键生成 inventory、summary、README、manifest 和 metric gate 日志。
 - 新增 LIBERO run profile 说明，减少 smoke/eval 手工环境变量配置错误。
+- 新增 LIBERO run plan 说明，可在上服务器前生成完整命令清单。
 - 新增用 `scripts/preflight.py --libero-result` 校验评估结果文件的说明。
 - 新增 LIBERO result 校验会比较 overall/per-suite summary 与 episode 明细一致性的说明。
 - 新增用 `scripts/preflight.py --libero-manifest` 校验 LIBERO run manifest 的说明。
@@ -303,6 +305,10 @@
   - 输出 `run_inventory.md/csv`、`result_summary.md/csv`、`README.md` 和 `report_manifest.json`。
   - 支持复用 metric gate 选项写出 `metrics_gate.txt`，失败时返回非零退出码。
   - `README.md` 会记录输入数量、生成文件、metric gate 状态和失败原因，便于报告目录单独交接。
+- 新增 `scripts/plan_libero_run.py`
+  - 输入 run dir、checkpoint、profile、Python 解释器路径和可选 metric gate。
+  - 输出 `run_plan.md`，包含 dry-run、启动 Evo-1 server、运行 LIBERO client、校验 run dir 和生成报告命令。
+  - 支持 smoke/eval 两种计划，避免服务器上手工拼接多条命令。
 - CI 新增 shell 脚本语法检查、`scripts/preflight.py` 和 `compileall scripts`。
 
 ## 服务器部署状态
@@ -375,7 +381,7 @@ scripts/check_repo.sh
 本地结果：
 
 - `scripts/check_repo.sh`：通过
-- `pytest`：114 passed, 3 skipped
+- `pytest`：118 passed, 3 skipped
 - `scripts/audit_requirements.py`：通过；当前 Evo1 主环境和 dev 环境的浮动依赖都以 WARN 暴露，并已在 `requirements-policy.json` 登记理由
 - `scripts/preflight.py`：通过；仅提示默认训练数据路径不存在的 WARN（本地未放完整训练数据，非失败）
 - `bash -n scripts/*.sh`：通过
@@ -392,6 +398,7 @@ scripts/check_repo.sh
 - `python3 scripts/report_libero_runs.py /tmp/evo1_run_dir_check --output-dir /tmp/evo1_report_check_readme --min-success-rate 0 --min-total-episodes 1`：通过，报告目录包含可读 `README.md`
 - `EVO1_LIBERO_DRY_RUN=1 EVO1_LIBERO_PROFILE=configs/libero_profiles/full_eval.env scripts/run_libero_eval.sh`：通过，能安全解析 repo-relative LIBERO profile
 - `scripts/check_repo.sh`：通过并实际 dry-run 校验 `configs/libero_profiles/smoke.env` 与 `configs/libero_profiles/full_eval.env`
+- `python3 scripts/plan_libero_run.py --kind eval --run-dir /tmp/evo1_planned_run --checkpoint /tmp/checkpoints/Evo1_LIBERO --profile configs/libero_profiles/full_eval.env --output /tmp/evo1_planned_run_plan.md --server-python /envs/evo/bin/python --libero-python /envs/libero/bin/python --min-total-episodes 10`：通过，能生成可执行 LIBERO run plan
 - `compileall`：通过
 - `git diff --check`：通过
 - `python3 -m ruff check .`：本地 Python 环境未安装 `ruff`；`scripts/check_repo.sh` 已按本地默认策略 WARN 后跳过，CI 会强制要求 `ruff`

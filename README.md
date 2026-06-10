@@ -215,6 +215,22 @@ Set `EVO1_LIBERO_RUN_DIR=/path/to/run` to use the same grouped output layout as 
 Use `EVO1_LIBERO_PROFILE=configs/libero_profiles/full_eval.env` to make the full-eval settings
 explicit in command logs.
 
+Before running on a server, generate a reproducible command plan:
+
+```bash
+python scripts/plan_libero_run.py \
+  --kind eval \
+  --run-dir /root/autodl-tmp/evo1_runs/libero_eval_001 \
+  --checkpoint /root/autodl-tmp/checkpoints/Evo1_LIBERO \
+  --profile configs/libero_profiles/full_eval.env \
+  --server-python /root/autodl-tmp/miniforge3/envs/Evo1/bin/python \
+  --libero-python /root/autodl-tmp/envs/libero/bin/python \
+  --min-total-episodes 10
+```
+
+The plan file includes the server command, LIBERO client command, artifact validation command, and
+report command with the same paths and profile.
+
 The LIBERO client stores logs, videos, and a machine-readable result summary under
 `LIBERO_evaluation/`.
 
