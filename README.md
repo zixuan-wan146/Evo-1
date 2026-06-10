@@ -152,6 +152,16 @@ LIBERO_PYTHON=/root/autodl-tmp/envs/libero/bin/python scripts/run_libero_smoke.s
 The result summary JSON contains the evaluated episodes, per-suite success rates, and failure reasons
 such as action parsing errors or step-limit exhaustion.
 
+To compare one or more LIBERO runs after evaluation:
+
+```bash
+python scripts/summarize_libero_results.py LIBERO_evaluation/log_file/*_results.json \
+  --output outputs/libero_results.md
+python scripts/summarize_libero_results.py LIBERO_evaluation/log_file/*_results.json \
+  --format csv \
+  --output outputs/libero_results.csv
+```
+
 For headless smoke tests, `EVO1_MUJOCO_GL=osmesa` is the more stable default. Use
 `EVO1_MUJOCO_GL=egl` on GPU servers when EGL cleanup warnings are acceptable and
 faster rendering is preferred.

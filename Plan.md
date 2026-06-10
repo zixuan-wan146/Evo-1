@@ -40,6 +40,7 @@
 - `Test training configuration validation`
 - `Make dataset config path resolution explicit`（本轮新增，记录训练数据配置路径解析规则）
 - `Record LIBERO evaluation summaries`（本轮新增，记录 LIBERO 评估结果 JSON、失败原因和统计汇总）
+- `Summarize LIBERO result files`（本轮新增，聚合多个 LIBERO result JSON 为 Markdown/CSV 对比表）
 
 服务器对应提交：
 
@@ -162,6 +163,7 @@
 - 新增远程服务器部署说明。
 - 新增训练数据路径解析说明：`dataset/config.yaml` 内的相对路径从 `--dataset_config_base_dir` 解析。
 - 新增 LIBERO result summary JSON 的说明和路径覆盖示例。
+- 新增 LIBERO 多次运行结果汇总为 Markdown/CSV 的说明。
 - 记录 `HF_HOME`、`HUGGINGFACE_HUB_CACHE`、`PIP_CACHE_DIR`、`TMPDIR` 等数据盘路径建议。
 - 记录 `flash-attn` cross-device link 安装问题的处理方式。
 
@@ -186,6 +188,10 @@
   - 固化 1 task / 1 episode / 1 step 的 LIBERO smoke 默认配置。
   - 支持通过环境变量扩展到更长 eval。
   - 默认写出 `${EVO1_LIBERO_CKPT_NAME}_results.json`。
+- 新增 `scripts/summarize_libero_results.py`
+  - 支持输入 result JSON 文件、目录或 glob。
+  - 输出 overall 和 per-suite 行。
+  - 支持 Markdown 和 CSV，用于多次复现/改进结果对比。
 - CI 新增 shell 脚本语法检查、`scripts/preflight.py` 和 `compileall scripts`。
 
 ## 服务器部署状态
@@ -252,7 +258,7 @@ git diff --check
 
 本地结果：
 
-- `pytest`：37 passed, 3 skipped
+- `pytest`：41 passed, 3 skipped
 - `scripts/preflight.py`：通过；仅提示默认训练数据路径不存在的 WARN（本地未放完整训练数据，非失败）
 - `bash -n scripts/*.sh`：通过
 - `compileall`：通过

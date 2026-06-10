@@ -37,6 +37,7 @@ REQUIRED_REPO_FILES = (
     "scripts/setup_libero_env.sh",
     "scripts/start_evo1_server.sh",
     "scripts/run_libero_smoke.sh",
+    "scripts/summarize_libero_results.py",
 )
 
 REQUIRED_CHECKPOINT_FILES = (
