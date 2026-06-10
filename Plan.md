@@ -42,6 +42,7 @@
 - `Record LIBERO evaluation summaries`（本轮新增，记录 LIBERO 评估结果 JSON、失败原因和统计汇总）
 - `Summarize LIBERO result files`（本轮新增，聚合多个 LIBERO result JSON 为 Markdown/CSV 对比表）
 - `Record LIBERO run metadata`（本轮新增，在 result JSON 和对比表中记录 git/命令/环境元数据）
+- `Validate Evo-1 inference requests`（本轮新增，抽出服务端 JSON 请求协议校验并测试）
 
 服务器对应提交：
 
@@ -95,9 +96,14 @@
 - `Evo_1/scripts/Evo1_server.py`
   - 增加设备可用性校验。
   - 请求字段和 shape 校验从 `assert` 改为运行时错误。
+  - 使用 `Evo_1/server_protocol.py` 统一校验 websocket JSON 请求。
   - 修复 `torch.no_grad()` 与 autocast 上下文写法。
   - 单请求失败时通过 websocket 返回 JSON error。
   - `torch.load(..., weights_only=False)` 显式声明 DeepSpeed checkpoint 可信加载假设。
+
+- `Evo_1/server_protocol.py`
+  - 新增纯 Python 请求协议校验，单测不依赖 torch/cv2/model。
+  - 校验必填字段、3 路 RGB 图像、0..255 有限像素、有限 state、0/1 mask、mask 非全空和自动 padding。
 
 - `Evo_1/dataset/simulation_dataset.py`
   - 样本失败读取从无限递归改为有限重试。
@@ -164,6 +170,7 @@
 - 新增 MetaWorld/LIBERO 环境变量使用示例。
 - 新增远程服务器部署说明。
 - 新增训练数据路径解析说明：`dataset/config.yaml` 内的相对路径从 `--dataset_config_base_dir` 解析。
+- 新增 Evo-1 websocket inference request JSON 契约说明。
 - 新增 LIBERO result summary JSON 的说明和路径覆盖示例。
 - 新增 LIBERO 多次运行结果汇总为 Markdown/CSV 的说明。
 - 新增 LIBERO result JSON 中运行元数据和汇总表 git 列的说明。
@@ -262,7 +269,7 @@ git diff --check
 
 本地结果：
 
-- `pytest`：42 passed, 3 skipped
+- `pytest`：52 passed, 3 skipped
 - `scripts/preflight.py`：通过；仅提示默认训练数据路径不存在的 WARN（本地未放完整训练数据，非失败）
 - `bash -n scripts/*.sh`：通过
 - `compileall`：通过

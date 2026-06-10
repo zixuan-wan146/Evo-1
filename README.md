@@ -78,6 +78,14 @@ cd Evo_1
 python scripts/Evo1_server.py --ckpt_dir /path/to/checkpoint --port 9000
 ```
 
+The WebSocket request must be a JSON object with:
+
+- `image`: exactly 3 RGB image arrays with pixel values in `0..255`; images are resized by the server.
+- `state`: a non-empty finite numeric vector with length at most 24.
+- `image_mask`: 0/1 mask with length at most 3; shorter masks are padded with zeros.
+- `action_mask`: 0/1 mask with length at most 24; shorter masks are padded with zeros and at least one dimension must be active.
+- `prompt`: optional task instruction string.
+
 Run the MetaWorld client:
 
 ```bash

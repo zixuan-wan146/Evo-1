@@ -24,10 +24,9 @@ from runtime_config import (
     DEFAULT_SERVER_HOST,
     DEFAULT_SERVER_PORT,
     IMAGE_SIZE,
-    MAX_VIEWS,
     TARGET_STATE_DIM,
-    normalize_mask,
 )
+from server_protocol import validate_inference_request
 from model.evo1 import EVO1
 from utils.normalization import NormalizationStats
 
@@ -91,30 +90,20 @@ def pad_state_tensor(state: torch.Tensor, target_dim: int = TARGET_STATE_DIM) ->
 
 def infer_from_json_dict(data: dict, model, normalizer):
     device = next(model.parameters()).device
+    request = validate_inference_request(data)
 
-    required_fields = ("image", "state", "image_mask", "action_mask")
-    missing_fields = [field for field in required_fields if field not in data]
-    if missing_fields:
-        raise ValueError(f"Missing required request fields: {missing_fields}")
-
-    images = [decode_image_from_list(img, device) for img in data["image"]]
-    if len(images) != MAX_VIEWS:
-        raise ValueError(f"Must provide exactly {MAX_VIEWS} images, got {len(images)}.")
+    images = [decode_image_from_list(img, device) for img in request["image"]]
     for img in images:
         expected_shape = (3, IMAGE_SIZE, IMAGE_SIZE)
         if tuple(img.shape) != expected_shape:
             raise ValueError(f"image_size must be {expected_shape}, got {tuple(img.shape)}")
 
-    state = torch.tensor(data["state"], dtype=torch.float32, device=device)
+    state = torch.tensor(request["state"], dtype=torch.float32, device=device)
     norm_state = normalizer.normalize_state(pad_state_tensor(state)).to(dtype=torch.float32)
 
-    prompt = data.get("prompt", "")
-    image_mask = torch.tensor(normalize_mask(data["image_mask"], MAX_VIEWS), dtype=torch.int32, device=device)
-    action_mask = torch.tensor(
-        [normalize_mask(data["action_mask"], TARGET_STATE_DIM)],
-        dtype=torch.int32,
-        device=device,
-    )
+    prompt = request["prompt"]
+    image_mask = torch.tensor(request["image_mask"], dtype=torch.int32, device=device)
+    action_mask = torch.tensor([request["action_mask"]], dtype=torch.int32, device=device)
 
     autocast_context = (
         torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16)
