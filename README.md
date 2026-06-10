@@ -187,6 +187,14 @@ python scripts/preflight.py \
   --check-imports evo1
 ```
 
+After evaluation, validate result JSON files before summarizing or syncing them:
+
+```bash
+python scripts/preflight.py \
+  --dataset-config "" \
+  --libero-result "LIBERO_evaluation/log_file/*_results.json"
+```
+
 For a strict training-data check, add `--strict-data` after downloading the dataset.
 
 ## Training

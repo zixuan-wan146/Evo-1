@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import glob
 import importlib.util
 import json
 import os
@@ -61,6 +62,29 @@ LIBERO_RUNTIME_IMPORTS = (
     "mujoco",
     "websockets",
     "imageio",
+)
+
+LIBERO_SUMMARY_COUNT_FIELDS = (
+    "total_episodes",
+    "successful_episodes",
+    "failed_episodes",
+)
+
+LIBERO_SUMMARY_FLOAT_FIELDS = (
+    "success_rate",
+    "average_decision_steps",
+    "average_control_steps",
+    "average_success_decision_steps",
+)
+
+LIBERO_EPISODE_REQUIRED_FIELDS = (
+    "task_suite",
+    "task_id",
+    "episode_id",
+    "task_description",
+    "success",
+    "decision_steps",
+    "control_steps",
 )
 
 
@@ -275,6 +299,142 @@ def check_dataset_config(config_path: Path, base_dir: Path, strict_data: bool, r
         report.ok("dataset", f"dataset config describes {dataset_count} dataset(s)")
 
 
+def resolve_libero_result_paths(raw_inputs: list[str]) -> list[Path]:
+    paths: set[Path] = set()
+    for raw_input in raw_inputs:
+        matches = glob.glob(raw_input, recursive=True)
+        candidate_paths = matches if matches else [raw_input]
+        for candidate in candidate_paths:
+            path = Path(candidate).expanduser()
+            if path.is_dir():
+                paths.update(path.rglob("*_results.json"))
+            elif path.is_file():
+                paths.add(path)
+            else:
+                raise FileNotFoundError(f"LIBERO result path not found: {raw_input}")
+    return sorted(path.resolve() for path in paths)
+
+
+def check_libero_result_file(result_path: Path, report: Report) -> None:
+    if not result_path.exists():
+        report.fail("libero-result", f"result file does not exist: {result_path}")
+        return
+    if not result_path.is_file():
+        report.fail("libero-result", f"result path is not a file: {result_path}")
+        return
+
+    try:
+        with result_path.open("r") as f:
+            payload = json.load(f)
+    except json.JSONDecodeError as exc:
+        report.fail("libero-result", f"{result_path} is not valid JSON: {exc}")
+        return
+
+    if not isinstance(payload, dict):
+        report.fail("libero-result", f"{result_path} must contain a JSON object")
+        return
+
+    config = payload.get("config")
+    if config is not None and not isinstance(config, dict):
+        report.fail("libero-result", f"{result_path} config must be an object when present")
+        return
+
+    metadata = payload.get("metadata")
+    if metadata is not None and not isinstance(metadata, dict):
+        report.fail("libero-result", f"{result_path} metadata must be an object when present")
+        return
+
+    summary = payload.get("summary")
+    if not isinstance(summary, dict):
+        report.fail("libero-result", f"{result_path} has no summary object")
+        return
+    summary_error = _validate_libero_summary(summary, "summary")
+    if summary_error:
+        report.fail("libero-result", f"{result_path}: {summary_error}")
+        return
+
+    suites = summary.get("suites", {})
+    if suites is not None and not isinstance(suites, dict):
+        report.fail("libero-result", f"{result_path} summary.suites must be an object")
+        return
+    for suite_name, suite_summary in (suites or {}).items():
+        if not isinstance(suite_summary, dict):
+            report.fail("libero-result", f"{result_path} suite {suite_name!r} summary must be an object")
+            return
+        suite_error = _validate_libero_summary(suite_summary, f"summary.suites.{suite_name}")
+        if suite_error:
+            report.fail("libero-result", f"{result_path}: {suite_error}")
+            return
+
+    episodes = payload.get("episodes")
+    if not isinstance(episodes, list):
+        report.fail("libero-result", f"{result_path} episodes must be a list")
+        return
+    for index, episode in enumerate(episodes):
+        episode_error = _validate_libero_episode(episode, index)
+        if episode_error:
+            report.fail("libero-result", f"{result_path}: {episode_error}")
+            return
+
+    summary_total = int(summary["total_episodes"])
+    if summary_total != len(episodes):
+        report.fail(
+            "libero-result",
+            f"{result_path} summary total_episodes={summary_total} does not match episodes length={len(episodes)}",
+        )
+        return
+
+    report.ok("libero-result", f"{result_path} describes {len(episodes)} episode(s)")
+
+
+def _validate_libero_summary(summary: dict[str, Any], label: str) -> str | None:
+    required_fields = (*LIBERO_SUMMARY_COUNT_FIELDS, *LIBERO_SUMMARY_FLOAT_FIELDS)
+    missing = [field for field in required_fields if field not in summary]
+    if missing:
+        return f"{label} missing fields: {', '.join(missing)}"
+    for field in LIBERO_SUMMARY_COUNT_FIELDS:
+        value = summary[field]
+        if not isinstance(value, int) or isinstance(value, bool):
+            return f"{label}.{field} must be an integer"
+        if value < 0:
+            return f"{label}.{field} must be non-negative"
+    for field in LIBERO_SUMMARY_FLOAT_FIELDS:
+        value = summary[field]
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return f"{label}.{field} must be numeric"
+        if value < 0:
+            return f"{label}.{field} must be non-negative"
+    if not 0 <= float(summary["success_rate"]) <= 1:
+        return f"{label}.success_rate must be between 0 and 1"
+    total = int(summary["total_episodes"])
+    successful = int(summary["successful_episodes"])
+    failed = int(summary["failed_episodes"])
+    if successful + failed != total:
+        return f"{label} successful_episodes + failed_episodes must equal total_episodes"
+    return None
+
+
+def _validate_libero_episode(episode: Any, index: int) -> str | None:
+    if not isinstance(episode, dict):
+        return f"episodes[{index}] must be an object"
+    missing = [field for field in LIBERO_EPISODE_REQUIRED_FIELDS if field not in episode]
+    if missing:
+        return f"episodes[{index}] missing fields: {', '.join(missing)}"
+    if not isinstance(episode["task_suite"], str) or not episode["task_suite"]:
+        return f"episodes[{index}].task_suite must be a non-empty string"
+    if not isinstance(episode["task_description"], str):
+        return f"episodes[{index}].task_description must be a string"
+    if not isinstance(episode["success"], bool):
+        return f"episodes[{index}].success must be a boolean"
+    for field in ("task_id", "episode_id", "decision_steps", "control_steps"):
+        value = episode[field]
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            return f"episodes[{index}].{field} must be a non-negative integer"
+    if not episode["success"] and not str(episode.get("failure_reason", "")).strip():
+        return f"episodes[{index}].failure_reason is required for failed episodes"
+    return None
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run lightweight Evo-1 repository preflight checks.")
     parser.add_argument("--repo-root", default=str(repo_root_from_script()), help="Repository root to check.")
@@ -300,6 +460,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="none",
         help="Optionally require runtime packages to be importable.",
     )
+    parser.add_argument(
+        "--libero-result",
+        action="append",
+        default=[],
+        help="Optional LIBERO result JSON file, directory, or glob to validate. Can be passed multiple times.",
+    )
     parser.add_argument("--skip-shell-syntax", action="store_true", help="Skip bash -n checks for scripts/*.sh.")
     return parser.parse_args(argv)
 
@@ -320,6 +486,18 @@ def run_preflight(args: argparse.Namespace) -> Report:
 
     if args.checkpoint:
         check_checkpoint_dir(Path(args.checkpoint).expanduser().resolve(), report)
+
+    libero_result_inputs = getattr(args, "libero_result", [])
+    if libero_result_inputs:
+        try:
+            libero_result_paths = resolve_libero_result_paths(libero_result_inputs)
+        except FileNotFoundError as exc:
+            report.fail("libero-result", str(exc))
+        else:
+            if not libero_result_paths:
+                report.fail("libero-result", "no LIBERO result files matched")
+            for result_path in libero_result_paths:
+                check_libero_result_file(result_path, report)
 
     if args.check_imports in ("evo1", "all"):
         check_imports(EVO1_RUNTIME_IMPORTS, report, "evo1-imports")
