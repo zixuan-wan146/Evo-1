@@ -262,6 +262,18 @@ Configure the dataset path in `Evo_1/dataset/config.yaml`. The default path expe
 Evo1_training_dataset/Evo1_MetaWorld_Dataset
 ```
 
+Before starting a training run on a new dataset copy, validate the dataset structure from the
+repository root:
+
+```bash
+python scripts/validate_training_dataset.py \
+  --dataset-config Evo_1/dataset/config.yaml \
+  --dataset-base-dir Evo_1
+```
+
+The validator checks `tasks.jsonl`, `episodes.jsonl`, `stats.json` or `episodes_stats.jsonl`,
+`data/*/*.parquet`, and expected video paths derived from the dataset `view_map`.
+
 Run stage 1 training:
 
 ```bash

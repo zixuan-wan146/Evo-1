@@ -22,6 +22,7 @@ from Evo_1.dataset.config_utils import (  # noqa: E402
     resolve_dataset_config_paths,
     validate_dataset_config_structure,
 )
+from Evo_1.dataset.validation import validate_configured_datasets  # noqa: E402
 from Evo_1.runtime_config import TARGET_STATE_DIM  # noqa: E402
 
 
@@ -35,6 +36,7 @@ REQUIRED_REPO_FILES = (
     "Evo_1/scripts/train.py",
     "Evo_1/dataset/config.yaml",
     "Evo_1/dataset/config_utils.py",
+    "Evo_1/dataset/validation.py",
     "LIBERO_evaluation/libero_action_protocol.py",
     "LIBERO_evaluation/libero_client_config.py",
     "LIBERO_evaluation/libero_eval_summary.py",
@@ -42,6 +44,7 @@ REQUIRED_REPO_FILES = (
     "scripts/preflight.py",
     "scripts/audit_requirements.py",
     "scripts/check_repo.sh",
+    "scripts/validate_training_dataset.py",
     "scripts/setup_libero_env.sh",
     "scripts/start_evo1_server.sh",
     "scripts/export_unpushed_commits.sh",
@@ -366,37 +369,28 @@ def check_dataset_config(config_path: Path, base_dir: Path, strict_data: bool, r
         report.fail("dataset", str(exc))
         return
 
+    if strict_data:
+        issues = validate_configured_datasets(config, base_dir, require_videos=True)
+        if issues:
+            for issue in issues:
+                if issue.level == "FAIL":
+                    report.fail("dataset", f"{issue.path}: {issue.message}")
+                else:
+                    report.warn("dataset", f"{issue.path}: {issue.message}")
+            return
+        report.ok("dataset", f"dataset config describes {dataset_count} dataset(s) with valid training data")
+        return
+
     missing_paths: list[str] = []
-    missing_required_data: list[str] = []
     for group_name, dataset_name, dataset_config in iter_dataset_entries(resolved_config):
         dataset_path = Path(str(dataset_config["path"]))
         if not dataset_path.exists():
             missing_paths.append(f"{group_name}/{dataset_name}: {dataset_path}")
             continue
-        if strict_data:
-            required_paths = (
-                dataset_path / "meta" / "tasks.jsonl",
-                dataset_path / "meta" / "episodes.jsonl",
-            )
-            for required_path in required_paths:
-                if not required_path.exists():
-                    missing_required_data.append(str(required_path))
-            has_stats = (dataset_path / "meta" / "stats.json").exists() or (
-                dataset_path / "meta" / "episodes_stats.jsonl"
-            ).exists()
-            if not has_stats:
-                missing_required_data.append(str(dataset_path / "meta" / "stats.json"))
-            if not list(dataset_path.glob("data/*/*.parquet")):
-                missing_required_data.append(str(dataset_path / "data/*/*.parquet"))
 
     if missing_paths:
         message = "configured dataset paths do not exist: " + "; ".join(missing_paths)
-        if strict_data:
-            report.fail("dataset", message)
-        else:
-            report.warn("dataset", message)
-    elif missing_required_data:
-        report.fail("dataset", "missing required dataset files: " + "; ".join(missing_required_data))
+        report.warn("dataset", message)
     else:
         report.ok("dataset", f"dataset config describes {dataset_count} dataset(s)")
 

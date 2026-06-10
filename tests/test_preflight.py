@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 import sys
 
+import pytest
+
 
 def load_preflight_module():
     module_path = Path(__file__).resolve().parents[1] / "scripts" / "preflight.py"
@@ -263,6 +265,32 @@ def test_dataset_config_validation_accepts_repo_default_without_strict_data():
     )
 
     assert not report.has_failures
+
+
+def test_dataset_config_strict_data_rejects_missing_dataset_path(tmp_path):
+    pytest.importorskip("yaml")
+    preflight = load_preflight_module()
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "max_action_dim: 4",
+                "max_state_dim: 4",
+                "max_views: 1",
+                "data_groups:",
+                "  test_arm:",
+                "    missing_dataset:",
+                "      path: missing",
+                "",
+            ]
+        )
+    )
+    report = preflight.Report()
+
+    preflight.check_dataset_config(config_path, tmp_path, strict_data=True, report=report)
+
+    assert report.has_failures
+    assert "path does not exist" in report.results[-1].message
 
 
 def test_run_preflight_default_has_no_failures():
