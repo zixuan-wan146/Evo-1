@@ -22,6 +22,7 @@ from accelerate import Accelerator, DistributedType
 import json
 import shutil
 from torch.optim import AdamW
+from training_config import validate_training_config
 
 import warnings
 
@@ -33,34 +34,6 @@ def get_with_warning(config: dict, key: str, default):
     else:
         warnings.warn(f"'{key}' not found in config, using default: {default!r}")
         return default
-
-
-def validate_training_config(config: dict):
-    dataset_config_path = config.get("dataset_config_path")
-    if not dataset_config_path:
-        raise ValueError("--dataset_config_path is required")
-    if not Path(dataset_config_path).exists():
-        raise FileNotFoundError(f"Dataset config file not found: {dataset_config_path}")
-
-    max_steps = int(config.get("max_steps", 0))
-    if max_steps <= 0:
-        raise ValueError(f"--max_steps must be positive, got {max_steps}")
-
-    for key in ("log_interval", "ckpt_interval", "batch_size", "horizon", "per_action_dim", "state_dim"):
-        value = int(config.get(key, 0))
-        if value <= 0:
-            raise ValueError(f"--{key} must be positive, got {value}")
-
-    device = str(config.get("device", "cuda"))
-    if device.startswith("cuda") and not torch.cuda.is_available():
-        raise RuntimeError(f"Requested device '{device}', but CUDA is not available.")
-
-    resume = bool(config.get("resume", False))
-    resume_path = config.get("resume_path")
-    if resume != bool(resume_path):
-        raise ValueError("Inconsistent resume configuration: --resume and --resume_path must be set together.")
-    if resume and not Path(resume_path).exists():
-        raise FileNotFoundError(f"Resume checkpoint path not found: {resume_path}")
 
 
 def get_autocast_context(device):

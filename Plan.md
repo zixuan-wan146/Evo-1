@@ -67,6 +67,7 @@
 
 - `Evo_1/scripts/train.py`
   - 增加训练配置校验。
+  - 将训练配置校验抽到 `Evo_1/training_config.py`，可在无 torch/accelerate 的本地环境中测试。
   - 检查空 dataset 和空 dataloader。
   - 训练 forward 时传入 `embodiment_ids`。
   - 将 shape `assert` 改为显式 `ValueError`。

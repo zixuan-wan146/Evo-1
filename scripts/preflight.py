@@ -14,6 +14,7 @@ from typing import Any
 
 REQUIRED_REPO_FILES = (
     "README.md",
+    "Evo_1/training_config.py",
     "Evo_1/scripts/Evo1_server.py",
     "Evo_1/scripts/train.py",
     "Evo_1/dataset/config.yaml",
