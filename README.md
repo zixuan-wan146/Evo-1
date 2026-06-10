@@ -53,8 +53,9 @@ PyTorch is not installed.
 
 `scripts/check_repo.sh` runs the local quality gate: dependency policy audit, unit tests, optional
 `ruff`, shell syntax checks, repository preflight, LIBERO setup dry-run, LIBERO checkpoint download
-dry-run, `compileall`, and `git diff --check`. Set `EVO1_CHECK_REQUIRE_RUFF=1` in CI or a fully
-prepared dev environment to make missing `ruff` fail instead of warn.
+dry-run, LIBERO smoke/full-eval profile dry-runs, `compileall`, and `git diff --check`. Set
+`EVO1_CHECK_REQUIRE_RUFF=1` in CI or a fully prepared dev environment to make missing `ruff` fail
+instead of warn.
 
 `scripts/audit_requirements.py` fails when a new `requirements*.txt` file is not covered by
 `requirements-policy.json`, or when a dependency is left unpinned without an explicit reason.

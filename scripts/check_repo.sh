@@ -78,6 +78,14 @@ run_step "LIBERO setup dry-run" env EVO1_SETUP_LIBERO_DRY_RUN=1 "$script_dir/set
 run_step \
   "LIBERO checkpoint download dry-run" \
   env EVO1_DOWNLOAD_LIBERO_CHECKPOINT_DRY_RUN=1 "$script_dir/download_libero_checkpoint.sh"
+run_step \
+  "LIBERO smoke profile dry-run" \
+  env EVO1_LIBERO_DRY_RUN=1 EVO1_LIBERO_PROFILE=configs/libero_profiles/smoke.env \
+  "$script_dir/run_libero_smoke.sh"
+run_step \
+  "LIBERO eval profile dry-run" \
+  env EVO1_LIBERO_DRY_RUN=1 EVO1_LIBERO_PROFILE=configs/libero_profiles/full_eval.env \
+  "$script_dir/run_libero_eval.sh"
 
 if [ "${EVO1_CHECK_SKIP_COMPILE:-0}" = "1" ]; then
   log "Skipping compileall because EVO1_CHECK_SKIP_COMPILE=1"
