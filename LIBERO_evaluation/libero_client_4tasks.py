@@ -11,64 +11,19 @@ import math
 import imageio
 import random
 
-_MUJOCO_GL = os.getenv("EVO1_MUJOCO_GL", "osmesa")
-os.environ.setdefault("MUJOCO_GL", _MUJOCO_GL)
-if _MUJOCO_GL == "egl":
-    os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
+from libero_client_config import LiberoClientConfig, configure_mujoco_environment
+
+args = LiberoClientConfig.from_env()
+configure_mujoco_environment(args)
 
 from libero.libero import benchmark, get_libero_path  # noqa: E402
 from libero.libero.envs import OffScreenRenderEnv  # noqa: E402
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [0.0]
 
-
-def _env_int(name: str, default: int) -> int:
-    value = os.getenv(name)
-    return default if value is None or value == "" else int(value)
-
-
-def _env_list(name: str, default: list[str]) -> list[str]:
-    value = os.getenv(name)
-    if value is None or value.strip() == "":
-        return default
-    return [item.strip() for item in value.split(",") if item.strip()]
-
-
-def _env_int_list(name: str, default: list[int]) -> list[int]:
-    value = os.getenv(name)
-    if value is None or value.strip() == "":
-        return default
-    return [int(item.strip()) for item in value.split(",") if item.strip()]
-
-
-######################################
-class Args:
-    horizon = _env_int("EVO1_LIBERO_HORIZON", 14)
-    max_steps = _env_int_list("EVO1_LIBERO_MAX_STEPS", [25, 25, 25, 95])
-    SERVER_URL = os.getenv("EVO1_SERVER_URI", os.getenv("EVO1_LIBERO_SERVER_URL", "ws://127.0.0.1:9000"))
-    ckpt_name = os.getenv("EVO1_LIBERO_CKPT_NAME", "Evo1_libero_all")
-    task_suites = _env_list("EVO1_LIBERO_TASK_SUITES", ["libero_spatial", "libero_object", "libero_goal", "libero_10"])
-    log_dir = os.getenv("EVO1_LIBERO_LOG_DIR", "./log_file")
-    video_dir = os.getenv("EVO1_LIBERO_VIDEO_DIR", f"./video_log_file/{ckpt_name}")
-    log_file = os.getenv("EVO1_LIBERO_LOG_FILE", os.path.join(log_dir, f"{ckpt_name}.txt"))
-    num_episodes = _env_int("EVO1_LIBERO_EPISODES", 10)
-    task_limit = _env_int("EVO1_LIBERO_TASK_LIMIT", 0)
-    SEED = _env_int("EVO1_LIBERO_SEED", 42)
-    
-    
-
-args = Args()
-if len(args.max_steps) == 1 and len(args.task_suites) > 1:
-    args.max_steps = args.max_steps * len(args.task_suites)
-elif len(args.max_steps) != len(args.task_suites):
-    raise ValueError(
-        "EVO1_LIBERO_MAX_STEPS must provide one integer per task suite: "
-        f"got {len(args.max_steps)} values for {len(args.task_suites)} suites"
-    )
-
 ########################################
 
-os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
+os.makedirs(os.path.dirname(args.log_file) or ".", exist_ok=True)
 # ========= Logging =========
 logging.basicConfig(
     level=logging.INFO,
