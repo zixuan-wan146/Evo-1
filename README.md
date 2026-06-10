@@ -131,6 +131,16 @@ The setup script creates a Python 3.8.13 LIBERO environment, installs `libero==0
 downloads LIBERO assets, configures `~/.libero/config.yaml`, and installs the headless
 MuJoCo system libraries when run as root on Ubuntu.
 
+The script installs top-level LIBERO packages from `requirements-libero.txt`. To validate resolved
+paths without creating a conda environment or downloading assets:
+
+```bash
+EVO1_SETUP_LIBERO_DRY_RUN=1 scripts/setup_libero_env.sh
+```
+
+Use `EVO1_LIBERO_REQUIREMENTS=/path/to/requirements.txt` only when deliberately testing another
+LIBERO dependency set.
+
 Download the checkpoint:
 
 ```bash

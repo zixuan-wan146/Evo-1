@@ -49,6 +49,7 @@
 - `Check LIBERO result consistency`（本轮新增，preflight 会校验 summary 与 episode 明细一致）
 - `Add full LIBERO eval launcher`（本轮新增，将正式 eval 入口与 smoke 入口分离）
 - `Export unpushed commits as patches`（本轮新增，GitHub 权限阻塞时导出可迁移 patch bundle）
+- `Pin LIBERO environment entrypoints`（本轮新增，固定 LIBERO 评估环境顶层依赖并加入 setup dry-run）
 
 服务器对应提交：
 
@@ -185,6 +186,8 @@
 - 新增 checkpoint preflight 会检查 `config.json` 关键维度和 `norm_stats.json` min/max 结构的说明。
 - 新增 `scripts/start_evo1_server.sh` 默认先跑 checkpoint preflight、可用 `EVO1_SKIP_PREFLIGHT=1` 跳过的说明。
 - 新增 `scripts/run_libero_eval.sh` 正式 LIBERO eval 入口和 dry-run 说明。
+- 新增 `requirements-libero.txt`，记录 LIBERO 评估环境顶层依赖入口，避免和 Evo1 主环境混用。
+- 新增 `scripts/setup_libero_env.sh` dry-run 说明，可在不创建 conda 环境、不下载 assets 的情况下检查路径解析。
 - 记录 `HF_HOME`、`HUGGINGFACE_HUB_CACHE`、`PIP_CACHE_DIR`、`TMPDIR` 等数据盘路径建议。
 - 记录 `flash-attn` cross-device link 安装问题的处理方式。
 
@@ -198,7 +201,9 @@
   - 可选检查 LIBERO result JSON 文件、目录或 glob：`--libero-result path_or_glob`，包括 schema 和 summary/episode 一致性。
 - 新增 `scripts/setup_libero_env.sh`
   - 创建/复用 LIBERO Python 3.8.13 conda prefix env。
-  - 安装 `libero==0.1.1`、`websockets`、`imageio`。
+  - 默认从 `requirements-libero.txt` 安装 LIBERO 顶层依赖。
+  - 支持 `EVO1_SETUP_LIBERO_DRY_RUN=1` 打印解析后的路径而不创建环境或下载资源。
+  - 支持 `EVO1_LIBERO_REQUIREMENTS=/path/to/requirements.txt` 测试替代依赖集合。
   - 下载 LIBERO assets 到数据盘。
   - 写入 `~/.libero/config.yaml`。
   - 将包内 `assets` 软链接到数据盘 assets 目录。
@@ -245,6 +250,12 @@
 - 其余 `Evo_1/requirements.txt` 依赖
 - 轻量开发依赖：`pytest`、`ruff`
 
+LIBERO 依赖规格：
+
+- 仓库内新增：`requirements-libero.txt`
+- 固定顶层包：`libero==0.1.1`、`robosuite==1.4.0`、`robomimic==0.2.0`、`mujoco==3.2.3`
+- 固定辅助包：`websockets==12.0`、`imageio==2.34.2`、`huggingface_hub==0.23.4`
+
 LIBERO 评估环境：
 
 - Conda prefix env：`/root/autodl-tmp/envs/libero`
@@ -286,15 +297,17 @@ shell 启动文件或系统环境，避免拖慢国内资源下载。
 python3 -m pytest
 python3 scripts/preflight.py
 bash -n scripts/*.sh
+EVO1_SETUP_LIBERO_DRY_RUN=1 scripts/setup_libero_env.sh
 PYTHONPYCACHEPREFIX=/tmp/evo1_pycache python3 -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation scripts tests
 git diff --check
 ```
 
 本地结果：
 
-- `pytest`：67 passed, 3 skipped
+- `pytest`：69 passed, 3 skipped
 - `scripts/preflight.py`：通过；仅提示默认训练数据路径不存在的 WARN（本地未放完整训练数据，非失败）
 - `bash -n scripts/*.sh`：通过
+- `EVO1_SETUP_LIBERO_DRY_RUN=1 scripts/setup_libero_env.sh`：通过，能在不创建 conda 环境、不下载 assets 的情况下打印解析后的路径
 - `compileall`：通过
 - `git diff --check`：通过
 - `python3 -m ruff check .`：未运行成功，本地 Python 环境未安装 `ruff`
@@ -340,7 +353,7 @@ python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation tests
 - 尚未跑完整 LIBERO suite eval，目前只跑了 1 task/1 episode/1 step 的 smoke。
 - 最新的 LIBERO result summary JSON 改动只完成了本地单元测试，服务器已关机，尚未在真实 LIBERO 环境上重跑 smoke。
 - 尚未下载训练数据集并跑短步数训练 smoke test。
-- `requirements.txt` 仍有部分浮动依赖，后续可进一步锁定版本。
+- `Evo_1/requirements.txt` 仍有部分浮动依赖，后续可进一步锁定主模型/训练环境版本。
 - `flash-attn` 目前按服务器实际环境安装成功，尚未写入主 requirements，避免无 GPU/无匹配 wheel 环境被强绑定。
 
 ## 下一步建议

@@ -27,6 +27,7 @@ from Evo_1.runtime_config import TARGET_STATE_DIM  # noqa: E402
 
 REQUIRED_REPO_FILES = (
     "README.md",
+    "requirements-libero.txt",
     "Evo_1/training_config.py",
     "Evo_1/server_protocol.py",
     "Evo_1/scripts/Evo1_server.py",

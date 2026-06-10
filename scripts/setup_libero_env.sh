@@ -161,15 +161,49 @@ print(assets_dir)
 PY
 }
 
+install_python_dependencies() {
+  local python_bin=$1
+  local requirements_file=$2
+
+  if [ -n "${LIBERO_VERSION:-}" ]; then
+    log "Installing LIBERO Python dependencies with LIBERO_VERSION override"
+    "$python_bin" -m pip install "libero==$LIBERO_VERSION" websockets imageio huggingface_hub
+    return
+  fi
+
+  log "Installing LIBERO Python dependencies from $requirements_file"
+  "$python_bin" -m pip install -r "$requirements_file"
+}
+
 main() {
-  local script_dir repo_root data_root conda_bin env_prefix python_bin assets_dir datasets_dir libero_root
+  local script_dir repo_root data_root conda_bin env_prefix python_bin assets_dir datasets_dir libero_root requirements_file
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   repo_root="$(cd "$script_dir/.." && pwd)"
   data_root="$(default_data_root)"
-  conda_bin="$(find_conda)"
   env_prefix="${LIBERO_ENV_PREFIX:-$data_root/envs/libero}"
   assets_dir="${LIBERO_ASSETS_DIR:-$data_root/libero/assets}"
   datasets_dir="${LIBERO_DATASETS_DIR:-$data_root/libero/datasets}"
+  requirements_file="${EVO1_LIBERO_REQUIREMENTS:-$repo_root/requirements-libero.txt}"
+
+  case "$requirements_file" in
+    /*) ;;
+    *) requirements_file="$repo_root/$requirements_file" ;;
+  esac
+  [ -f "$requirements_file" ] || fail "LIBERO requirements file not found: $requirements_file"
+
+  if [ "${EVO1_SETUP_LIBERO_DRY_RUN:-0}" = "1" ]; then
+    printf 'EVO1_DATA_ROOT=%s\n' "$data_root"
+    printf 'LIBERO_ENV_PREFIX=%s\n' "$env_prefix"
+    printf 'LIBERO_ASSETS_DIR=%s\n' "$assets_dir"
+    printf 'LIBERO_DATASETS_DIR=%s\n' "$datasets_dir"
+    printf 'EVO1_LIBERO_REQUIREMENTS=%s\n' "$requirements_file"
+    printf 'EVO1_DOWNLOAD_LIBERO_ASSETS=%s\n' "${EVO1_DOWNLOAD_LIBERO_ASSETS:-1}"
+    printf 'EVO1_INSTALL_SYSTEM_PACKAGES=%s\n' "${EVO1_INSTALL_SYSTEM_PACKAGES:-auto}"
+    printf 'CONDA_BIN=%s\n' "${CONDA_BIN:-auto}"
+    exit 0
+  fi
+
+  conda_bin="$(find_conda)"
 
   mkdir -p "$data_root" "$data_root/envs" "$data_root/pip-cache" "$data_root/hf-home" "$data_root/hf-cache"
   export PIP_CACHE_DIR="${PIP_CACHE_DIR:-$data_root/pip-cache}"
@@ -188,8 +222,7 @@ main() {
   python_bin="$env_prefix/bin/python"
   [ -x "$python_bin" ] || fail "Python not found after conda env creation: $python_bin"
 
-  log "Installing LIBERO Python dependencies"
-  "$python_bin" -m pip install "libero==${LIBERO_VERSION:-0.1.1}" websockets imageio
+  install_python_dependencies "$python_bin" "$requirements_file"
 
   download_assets "$python_bin" "$assets_dir"
   libero_root="$(write_libero_config "$python_bin" "$assets_dir" "$datasets_dir" | tail -n 1)"
