@@ -41,6 +41,7 @@
 - `Make dataset config path resolution explicit`（本轮新增，记录训练数据配置路径解析规则）
 - `Record LIBERO evaluation summaries`（本轮新增，记录 LIBERO 评估结果 JSON、失败原因和统计汇总）
 - `Summarize LIBERO result files`（本轮新增，聚合多个 LIBERO result JSON 为 Markdown/CSV 对比表）
+- `Record LIBERO run metadata`（本轮新增，在 result JSON 和对比表中记录 git/命令/环境元数据）
 
 服务器对应提交：
 
@@ -141,6 +142,7 @@
   - 新增 `EpisodeResult` 结构。
   - 新增成功率、平均步数、suite 分组统计。
   - 新增结果 JSON 写盘函数，可在无 LIBERO/robosuite 的本地环境中测试。
+  - 新增运行元数据：UTC 时间、命令、Python 版本、平台、git commit/branch/dirty 状态、非敏感环境变量。
 
 - `MetaWorld_evaluation/mt50_evo1_client_prompt.py`
   - 支持环境变量：
@@ -164,6 +166,7 @@
 - 新增训练数据路径解析说明：`dataset/config.yaml` 内的相对路径从 `--dataset_config_base_dir` 解析。
 - 新增 LIBERO result summary JSON 的说明和路径覆盖示例。
 - 新增 LIBERO 多次运行结果汇总为 Markdown/CSV 的说明。
+- 新增 LIBERO result JSON 中运行元数据和汇总表 git 列的说明。
 - 记录 `HF_HOME`、`HUGGINGFACE_HUB_CACHE`、`PIP_CACHE_DIR`、`TMPDIR` 等数据盘路径建议。
 - 记录 `flash-attn` cross-device link 安装问题的处理方式。
 
@@ -192,6 +195,7 @@
   - 支持输入 result JSON 文件、目录或 glob。
   - 输出 overall 和 per-suite 行。
   - 支持 Markdown 和 CSV，用于多次复现/改进结果对比。
+  - 输出 run name、git commit、dirty 状态和生成时间，便于追踪实验来源。
 - CI 新增 shell 脚本语法检查、`scripts/preflight.py` 和 `compileall scripts`。
 
 ## 服务器部署状态
@@ -258,7 +262,7 @@ git diff --check
 
 本地结果：
 
-- `pytest`：41 passed, 3 skipped
+- `pytest`：42 passed, 3 skipped
 - `scripts/preflight.py`：通过；仅提示默认训练数据路径不存在的 WARN（本地未放完整训练数据，非失败）
 - `bash -n scripts/*.sh`：通过
 - `compileall`：通过

@@ -149,8 +149,10 @@ export EVO1_LIBERO_RESULT_FILE="$PWD/LIBERO_evaluation/log_file/libero_spatial_r
 LIBERO_PYTHON=/root/autodl-tmp/envs/libero/bin/python scripts/run_libero_smoke.sh
 ```
 
-The result summary JSON contains the evaluated episodes, per-suite success rates, and failure reasons
-such as action parsing errors or step-limit exhaustion.
+The result summary JSON contains run metadata, evaluated episodes, per-suite success rates, and
+failure reasons such as action parsing errors or step-limit exhaustion. Metadata includes the
+current Git commit, dirty state, command, Python version, and selected non-secret environment
+variables.
 
 To compare one or more LIBERO runs after evaluation:
 
@@ -161,6 +163,9 @@ python scripts/summarize_libero_results.py LIBERO_evaluation/log_file/*_results.
   --format csv \
   --output outputs/libero_results.csv
 ```
+
+The comparison table includes the run name, Git commit, dirty state, overall metrics, and per-suite
+metrics when present in the result JSON.
 
 For headless smoke tests, `EVO1_MUJOCO_GL=osmesa` is the more stable default. Use
 `EVO1_MUJOCO_GL=egl` on GPU servers when EGL cleanup warnings are acceptable and

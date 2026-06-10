@@ -13,6 +13,9 @@ from typing import Any, Iterable, Mapping
 TABLE_COLUMNS = (
     "result_file",
     "run_name",
+    "created_at_utc",
+    "git_commit",
+    "git_dirty",
     "scope",
     "total_episodes",
     "successful_episodes",
@@ -48,12 +51,13 @@ def load_result_rows(path: Path) -> list[dict[str, Any]]:
         raise ValueError(f"{path} must contain a JSON object")
 
     config = payload.get("config", {})
+    metadata = payload.get("metadata", {})
     summary = payload.get("summary")
     if not isinstance(summary, Mapping):
         raise ValueError(f"{path} has no summary object")
 
     run_name = _run_name(path, config)
-    rows = [_summary_row(path, run_name, "overall", summary)]
+    rows = [_summary_row(path, run_name, metadata, "overall", summary)]
 
     suites = summary.get("suites", {})
     if suites is not None and not isinstance(suites, Mapping):
@@ -61,7 +65,7 @@ def load_result_rows(path: Path) -> list[dict[str, Any]]:
     for suite_name, suite_summary in sorted((suites or {}).items()):
         if not isinstance(suite_summary, Mapping):
             raise ValueError(f"{path} suite summary {suite_name!r} must be an object")
-        rows.append(_summary_row(path, run_name, f"suite:{suite_name}", suite_summary))
+        rows.append(_summary_row(path, run_name, metadata, f"suite:{suite_name}", suite_summary))
 
     return rows
 
@@ -144,10 +148,20 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _summary_row(path: Path, run_name: str, scope: str, summary: Mapping[str, Any]) -> dict[str, Any]:
+def _summary_row(
+    path: Path,
+    run_name: str,
+    metadata: Any,
+    scope: str,
+    summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    git = metadata.get("git", {}) if isinstance(metadata, Mapping) else {}
     return {
         "result_file": str(path),
         "run_name": run_name,
+        "created_at_utc": metadata.get("created_at_utc", "") if isinstance(metadata, Mapping) else "",
+        "git_commit": git.get("commit", "") if isinstance(git, Mapping) else "",
+        "git_dirty": git.get("is_dirty", "") if isinstance(git, Mapping) else "",
         "scope": scope,
         "total_episodes": int(summary.get("total_episodes", 0)),
         "successful_episodes": int(summary.get("successful_episodes", 0)),

@@ -24,6 +24,10 @@ def write_result_file(path: Path, ckpt_name: str = "run_a") -> Path:
         json.dumps(
             {
                 "config": {"ckpt_name": ckpt_name},
+                "metadata": {
+                    "created_at_utc": "2026-06-11T00:00:00Z",
+                    "git": {"commit": "abc123", "is_dirty": False},
+                },
                 "summary": {
                     "total_episodes": 3,
                     "successful_episodes": 2,
@@ -80,6 +84,9 @@ def test_load_result_rows_expands_overall_and_suite_rows(tmp_path):
 
     assert [row["scope"] for row in rows] == ["overall", "suite:libero_goal", "suite:libero_spatial"]
     assert rows[0]["run_name"] == "run_a"
+    assert rows[0]["created_at_utc"] == "2026-06-11T00:00:00Z"
+    assert rows[0]["git_commit"] == "abc123"
+    assert rows[0]["git_dirty"] is False
     assert rows[0]["success_rate"] == 2 / 3
     assert rows[1]["successful_episodes"] == 1
 
@@ -94,12 +101,13 @@ def test_write_markdown_and_csv_tables(tmp_path):
     module.write_csv(rows, csv_path)
 
     markdown = markdown_path.read_text()
-    assert "| result_file | run_name | scope |" in markdown
+    assert "| result_file | run_name | created_at_utc | git_commit | git_dirty | scope |" in markdown
     assert "suite:libero_spatial" in markdown
 
     csv_rows = list(csv.DictReader(csv_path.open()))
     assert csv_rows[0]["scope"] == "overall"
     assert csv_rows[0]["run_name"] == "run_a"
+    assert csv_rows[0]["git_commit"] == "abc123"
     assert csv_rows[0]["total_episodes"] == "3"
 
 

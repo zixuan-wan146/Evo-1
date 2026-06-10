@@ -4,6 +4,7 @@ import json
 
 from LIBERO_evaluation.libero_eval_summary import (
     EpisodeResult,
+    build_run_metadata,
     summarize_episode_results,
     write_result_summary,
 )
@@ -68,10 +69,41 @@ def test_write_result_summary_persists_config_summary_and_episodes(tmp_path):
         result_path,
         config={"horizon": 14, "task_suites": ["libero_spatial"]},
         results=sample_results(),
+        metadata={
+            "created_at_utc": "2026-06-11T00:00:00Z",
+            "git": {"commit": "abc123", "is_dirty": False},
+            "environment": {"EVO1_SERVER_URI": "ws://127.0.0.1:9000"},
+        },
     )
 
     payload = json.loads(written_path.read_text())
     assert written_path == result_path
     assert payload["config"]["horizon"] == 14
+    assert payload["metadata"]["git"]["commit"] == "abc123"
     assert payload["summary"]["total_episodes"] == 3
     assert payload["episodes"][1]["failure_reason"] == "max_steps_exhausted"
+
+
+def test_build_run_metadata_keeps_safe_environment_and_redacts_secret_like_keys(tmp_path):
+    metadata = build_run_metadata(
+        repo_root=tmp_path,
+        environ={
+            "EVO1_SERVER_URI": "ws://127.0.0.1:9000",
+            "EVO1_API_TOKEN": "secret",
+            "HF_ENDPOINT": "https://hf-mirror.com",
+            "UNRELATED": "ignored",
+            "MUJOCO_GL": "osmesa",
+        },
+        argv=["libero_client_4tasks.py"],
+        created_at_utc="2026-06-11T00:00:00Z",
+    )
+
+    assert metadata["created_at_utc"] == "2026-06-11T00:00:00Z"
+    assert metadata["argv"] == ["libero_client_4tasks.py"]
+    assert metadata["git"]["commit"] is None
+    assert metadata["git"]["is_dirty"] is None
+    assert metadata["environment"] == {
+        "EVO1_SERVER_URI": "ws://127.0.0.1:9000",
+        "HF_ENDPOINT": "https://hf-mirror.com",
+        "MUJOCO_GL": "osmesa",
+    }
