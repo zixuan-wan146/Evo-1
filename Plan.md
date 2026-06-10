@@ -1,6 +1,6 @@
 # Evo-1 工程化改造记录
 
-更新时间：2026-06-10
+更新时间：2026-06-11（服务器时间）
 
 ## 当前状态
 
@@ -25,14 +25,17 @@
 - `fb2ffad Improve engineering baseline for Evo-1`
 - `c97cfa8 Document remote setup and checkpoint loading`
 - `a2888f2 Add practical lint gate`
+- `Complete LIBERO remote smoke setup`（本轮新增，记录 LIBERO 环境、assets、smoke 结果和客户端修复）
 
 服务器对应提交：
 
 - `8e7edc8 Improve engineering baseline for Evo-1`
 - `3fb5b49 Document remote setup and checkpoint loading`
 - `ee64c12 Add practical lint gate`
+- `Complete LIBERO remote smoke setup`（服务器本轮新增，内容与本地等价）
 
 服务器提交哈希不同是因为通过 `git format-patch | git am` 应用，内容等价但提交对象不同。
+最新一次 `git push origin main` 仍失败：当前 GitHub 凭据 `myserendipity137` 对 `zixuan-wan146/Evo-1.git` 没有写权限。
 
 ## 已完成的工程改造
 
@@ -85,17 +88,25 @@
 ### 评估脚本配置化
 
 - `LIBERO_evaluation/libero_client_4tasks.py`
+  - 兼容 Python 3.8 类型注解。
+  - 将 `MUJOCO_GL` 设置提前到 LIBERO/robosuite 导入前。
+  - 默认使用 `osmesa` headless 渲染，可通过 `EVO1_MUJOCO_GL=egl` 切换到 EGL。
   - 客户端默认地址从 `ws://0.0.0.0:9000` 修正为 `ws://127.0.0.1:9000`。
+  - 支持单值 `EVO1_LIBERO_MAX_STEPS` 自动扩展到多个 task suite。
+  - 新增 `EVO1_LIBERO_TASK_LIMIT`，用于轻量 smoke 测试只跑前 N 个 task。
   - 支持环境变量：
     - `EVO1_SERVER_URI`
     - `EVO1_LIBERO_SERVER_URL`
+    - `EVO1_MUJOCO_GL`
     - `EVO1_LIBERO_HORIZON`
     - `EVO1_LIBERO_MAX_STEPS`
     - `EVO1_LIBERO_TASK_SUITES`
+    - `EVO1_LIBERO_TASK_LIMIT`
     - `EVO1_LIBERO_EPISODES`
     - `EVO1_LIBERO_SEED`
     - `EVO1_LIBERO_LOG_DIR`
     - `EVO1_LIBERO_VIDEO_DIR`
+    - `EVO1_LIBERO_LOG_FILE`
 
 - `MetaWorld_evaluation/mt50_evo1_client_prompt.py`
   - 支持环境变量：
@@ -137,6 +148,18 @@
 - flash-attn：2.8.3
 - 其余 `Evo_1/requirements.txt` 依赖
 - 轻量开发依赖：`pytest`、`ruff`
+
+LIBERO 评估环境：
+
+- Conda prefix env：`/root/autodl-tmp/envs/libero`
+- Python：3.8.13
+- 安装包：`libero==0.1.1`、`robosuite==1.4.0`、`robomimic==0.2.0`、`mujoco==3.2.3`、`websockets`、`imageio`
+- 系统 headless 渲染库：`libegl1`、`libosmesa6`、`libglu1-mesa`
+- LIBERO assets：`/root/autodl-tmp/libero/assets`
+- LIBERO datasets 目录：`/root/autodl-tmp/libero/datasets`
+- LIBERO 配置：`/root/.libero/config.yaml`
+- 已将 Python 包内 assets 路径软链接到数据盘：`site-packages/libero/libero/assets -> /root/autodl-tmp/libero/assets`
+- 说明：官方 GitHub 仓库在服务器上 full/sparse clone 速度很慢；本次使用 PyPI 的 `libero==0.1.1`，再从 Hugging Face 下载 assets。
 
 关键环境变量建议：
 
@@ -195,12 +218,23 @@ python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation tests
 - LIBERO checkpoint 加载成功。
 - 使用 MetaWorld checkpoint 跑 dummy JSON inference 成功。
 - 输出动作维度：`50 x 24`。
+- LIBERO 真实环境 smoke 成功：
+  - Evo1 websocket 服务：`ws://127.0.0.1:9000`
+  - checkpoint：`/root/autodl-tmp/checkpoints/Evo1_LIBERO`
+  - suite：`libero_spatial`
+  - task limit：1
+  - episodes：1
+  - max steps：1
+  - horizon：1
+  - 渲染后端：`osmesa`
+  - 输出视频：`/root/autodl-tmp/evo1_libero_smoke/videos_osmesa/libero_spatial/task1_episode1.mp4`
+  - 结果：流程跑通，任务失败是预期的，因为只执行 1 个决策步用于 smoke。
 
 ## 尚未完成
 
 - GitHub push 尚未完成，需要仓库写权限或新的目标 remote。
-- 尚未安装 MetaWorld 评估环境并跑真实 MT50 smoke eval。
-- 尚未安装 LIBERO 评估环境并跑真实 LIBERO smoke eval。
+- MetaWorld 已按用户要求停止，不再继续安装或评估。
+- 尚未跑完整 LIBERO suite eval，目前只跑了 1 task/1 episode/1 step 的 smoke。
 - 尚未下载训练数据集并跑短步数训练 smoke test。
 - `requirements.txt` 仍有部分浮动依赖，后续可进一步锁定版本。
 - `flash-attn` 目前按服务器实际环境安装成功，尚未写入主 requirements，避免无 GPU/无匹配 wheel 环境被强绑定。
@@ -210,7 +244,7 @@ python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation tests
 1. 处理 GitHub 权限：
    - 给 `myserendipity137` 写权限，或
    - 添加一个有写权限的新 remote。
-2. 在服务器继续安装 MetaWorld 环境，跑 `EVO1_MT50_EPISODES=1` 的真实 smoke eval。
-3. 安装 LIBERO 环境，跑 `EVO1_LIBERO_EPISODES=1` 的真实 smoke eval。
-4. 下载小规模训练数据或抽样数据，跑 `max_steps=1` 到 `10` 的训练 smoke test。
-5. 根据真实 eval/training 结果继续修复工程问题。
+2. 需要评估效果时，在服务器跑完整 LIBERO eval，例如逐个 suite 设置合理 `EVO1_LIBERO_MAX_STEPS` 和 `EVO1_LIBERO_HORIZON=14`。
+3. 下载小规模训练数据或抽样数据，跑 `max_steps=1` 到 `10` 的训练 smoke test。
+4. 根据真实 eval/training 结果继续修复工程问题。
+5. 将 LIBERO 环境安装步骤固化为脚本，减少以后手工配置系统库、assets 和 `~/.libero/config.yaml` 的成本。

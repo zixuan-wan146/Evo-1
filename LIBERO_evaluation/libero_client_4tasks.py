@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import websockets
 import numpy as np
@@ -9,9 +11,13 @@ import math
 import imageio
 import random
 
-from libero.libero import benchmark, get_libero_path
-from libero.libero.envs import OffScreenRenderEnv
-os.environ["MUJOCO_GL"] = "osmes"
+_MUJOCO_GL = os.getenv("EVO1_MUJOCO_GL", "osmesa")
+os.environ.setdefault("MUJOCO_GL", _MUJOCO_GL)
+if _MUJOCO_GL == "egl":
+    os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
+
+from libero.libero import benchmark, get_libero_path  # noqa: E402
+from libero.libero.envs import OffScreenRenderEnv  # noqa: E402
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [0.0]
 
@@ -46,12 +52,15 @@ class Args:
     video_dir = os.getenv("EVO1_LIBERO_VIDEO_DIR", f"./video_log_file/{ckpt_name}")
     log_file = os.getenv("EVO1_LIBERO_LOG_FILE", os.path.join(log_dir, f"{ckpt_name}.txt"))
     num_episodes = _env_int("EVO1_LIBERO_EPISODES", 10)
+    task_limit = _env_int("EVO1_LIBERO_TASK_LIMIT", 0)
     SEED = _env_int("EVO1_LIBERO_SEED", 42)
     
     
 
 args = Args()
-if len(args.max_steps) != len(args.task_suites):
+if len(args.max_steps) == 1 and len(args.task_suites) > 1:
+    args.max_steps = args.max_steps * len(args.task_suites)
+elif len(args.max_steps) != len(args.task_suites):
     raise ValueError(
         "EVO1_LIBERO_MAX_STEPS must provide one integer per task suite: "
         f"got {len(args.max_steps)} values for {len(args.task_suites)} suites"
@@ -136,6 +145,9 @@ async def run(SERVER_URL: str, max_steps: int = None, num_episodes: int = None, 
     benchmark_dict = benchmark.get_benchmark_dict()
     task_suite = benchmark_dict[task_suite_name]()
     num_tasks_in_suite = task_suite.n_tasks
+    task_ids = range(num_tasks_in_suite)
+    if args.task_limit > 0:
+        task_ids = range(min(args.task_limit, num_tasks_in_suite))
 
     log.info(f"Number of tasks: {num_tasks_in_suite}")
 
@@ -146,7 +158,7 @@ async def run(SERVER_URL: str, max_steps: int = None, num_episodes: int = None, 
     async with websockets.connect(SERVER_URL) as ws:
         log.info(f"===========================Start task suite {task_suite_name}========================")
 
-        for task_id in range(num_tasks_in_suite):
+        for task_id in task_ids:
 
             log.info(f"task_id={task_id}")
             #if task_id+1 not in [1,5,7,9] :

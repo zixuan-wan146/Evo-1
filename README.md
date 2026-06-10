@@ -142,11 +142,17 @@ Common LIBERO client settings can be overridden without editing source code:
 
 ```bash
 export EVO1_SERVER_URI=ws://127.0.0.1:9000
+export EVO1_MUJOCO_GL=osmesa
 export EVO1_LIBERO_EPISODES=1
 export EVO1_LIBERO_TASK_SUITES=libero_spatial
+export EVO1_LIBERO_TASK_LIMIT=1
 export EVO1_LIBERO_MAX_STEPS=25
 python libero_client_4tasks.py
 ```
+
+For headless smoke tests, `EVO1_MUJOCO_GL=osmesa` is the more stable default. Use
+`EVO1_MUJOCO_GL=egl` on GPU servers when EGL cleanup warnings are acceptable and
+faster rendering is preferred.
 
 ## Training
 
