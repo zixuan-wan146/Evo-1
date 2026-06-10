@@ -51,6 +51,7 @@ REQUIRED_REPO_FILES = (
     "scripts/export_unpushed_commits.sh",
     "scripts/run_libero_smoke.sh",
     "scripts/run_libero_eval.sh",
+    "scripts/write_libero_run_manifest.py",
     "scripts/summarize_libero_results.py",
 )
 

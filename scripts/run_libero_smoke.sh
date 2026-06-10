@@ -28,10 +28,12 @@ if [ -n "$run_dir" ]; then
   export EVO1_LIBERO_LOG_DIR="${EVO1_LIBERO_LOG_DIR:-$run_dir/logs}"
   export EVO1_LIBERO_VIDEO_DIR="${EVO1_LIBERO_VIDEO_DIR:-$run_dir/videos}"
   export EVO1_LIBERO_RESULT_FILE="${EVO1_LIBERO_RESULT_FILE:-$run_dir/results/${EVO1_LIBERO_CKPT_NAME}_results.json}"
+  export EVO1_LIBERO_MANIFEST_FILE="${EVO1_LIBERO_MANIFEST_FILE:-$run_dir/run_manifest.json}"
 else
   export EVO1_LIBERO_LOG_DIR="${EVO1_LIBERO_LOG_DIR:-$repo_root/LIBERO_evaluation/log_file}"
   export EVO1_LIBERO_VIDEO_DIR="${EVO1_LIBERO_VIDEO_DIR:-$repo_root/LIBERO_evaluation/video_log_file/$EVO1_LIBERO_CKPT_NAME}"
   export EVO1_LIBERO_RESULT_FILE="${EVO1_LIBERO_RESULT_FILE:-$EVO1_LIBERO_LOG_DIR/${EVO1_LIBERO_CKPT_NAME}_results.json}"
+  export EVO1_LIBERO_MANIFEST_FILE="${EVO1_LIBERO_MANIFEST_FILE:-$EVO1_LIBERO_LOG_DIR/${EVO1_LIBERO_CKPT_NAME}_run_manifest.json}"
 fi
 export EVO1_LIBERO_LOG_FILE="${EVO1_LIBERO_LOG_FILE:-$EVO1_LIBERO_LOG_DIR/$EVO1_LIBERO_CKPT_NAME.txt}"
 
@@ -44,7 +46,16 @@ if [ "${EVO1_LIBERO_DRY_RUN:-0}" = "1" ]; then
   exit 0
 fi
 
-mkdir -p "$EVO1_LIBERO_LOG_DIR" "$EVO1_LIBERO_VIDEO_DIR" "$(dirname "$EVO1_LIBERO_RESULT_FILE")"
+mkdir -p \
+  "$EVO1_LIBERO_LOG_DIR" \
+  "$EVO1_LIBERO_VIDEO_DIR" \
+  "$(dirname "$EVO1_LIBERO_RESULT_FILE")" \
+  "$(dirname "$EVO1_LIBERO_MANIFEST_FILE")"
+
+"$repo_root/scripts/write_libero_run_manifest.py" \
+  --output "$EVO1_LIBERO_MANIFEST_FILE" \
+  --run-kind smoke \
+  --repo-root "$repo_root"
 
 cd "$repo_root/LIBERO_evaluation"
 exec "$python_bin" libero_client_4tasks.py

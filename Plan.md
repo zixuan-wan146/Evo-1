@@ -14,9 +14,9 @@
   - `User root`
   - `IdentityFile /home/myser/.ssh/id_ed25519_autodl`
 - GitHub 推送状态：
-  - 本地提交已完成，但本地 `main` 仍领先 `origin/main` 28 个提交。
-  - 最新本地提交主题：`Group LIBERO run artifacts`。
-  - 最新未推送补丁包：`exports/unpushed_commits_20260610T184000Z`。
+  - 本地提交已完成，但本地 `main` 仍领先 `origin/main` 29 个提交。
+  - 最新本地提交主题：`Record LIBERO run manifests`。
+  - 最新未推送补丁包：`exports/unpushed_commits_20260610T184500Z`。
   - `git push origin main` 失败，原因是当前凭据 `myserendipity137` 没有 `zixuan-wan146/Evo-1.git` 写权限。
   - 需要给该账号写权限，或提供有权限的新 remote。
 - 服务器状态：
@@ -57,6 +57,7 @@
 - `Validate training dataset structure`（本轮新增，新增训练数据结构验证脚本和 strict-data 结构检查）
 - `Add LIBERO checkpoint downloader`（本轮新增，固化 LIBERO checkpoint 下载入口，默认不设置镜像源）
 - `Group LIBERO run artifacts`（本轮新增，支持 `EVO1_LIBERO_RUN_DIR` 统一管理 smoke/eval 输出）
+- `Record LIBERO run manifests`（本轮新增，LIBERO smoke/eval 启动前写出 run manifest）
 
 服务器对应提交：
 
@@ -66,7 +67,7 @@
 - `Complete LIBERO remote smoke setup`（服务器本轮新增，内容与本地等价）
 
 服务器提交哈希不同是因为通过 `git format-patch | git am` 应用，内容等价但提交对象不同。
-最新一次 `git push origin main` 在提交 `Group LIBERO run artifacts` 后仍失败：当前 GitHub 凭据 `myserendipity137` 对 `zixuan-wan146/Evo-1.git` 没有写权限。
+最新一次 `git push origin main` 在提交 `Record LIBERO run manifests` 后仍失败：当前 GitHub 凭据 `myserendipity137` 对 `zixuan-wan146/Evo-1.git` 没有写权限。
 
 ## 已完成的工程改造
 
@@ -200,6 +201,7 @@
 - 新增 `scripts/validate_training_dataset.py`，训练前可检查 meta、stats、parquet 和视频路径。
 - 新增 `scripts/download_libero_checkpoint.sh`，替代手写 `hf download MINT-SJTU/Evo1_LIBERO`。
 - 新增 `EVO1_LIBERO_RUN_DIR` 说明，将 LIBERO run 的日志、视频和结果 JSON 归档到同一目录。
+- 新增 LIBERO run manifest 说明，评估启动前写出 Git、命令、环境和输出路径上下文。
 - 记录 `HF_HOME`、`HUGGINGFACE_HUB_CACHE`、`PIP_CACHE_DIR`、`TMPDIR` 等数据盘路径建议。
 - 记录 `flash-attn` cross-device link 安装问题的处理方式。
 
@@ -228,12 +230,16 @@
   - 固化 1 task / 1 episode / 1 step 的 LIBERO smoke 默认配置。
   - 支持通过环境变量扩展到更长 eval。
   - 默认写出 `${EVO1_LIBERO_CKPT_NAME}_results.json`。
-  - 支持 `EVO1_LIBERO_RUN_DIR=/path/to/run`，将日志、视频、结果 JSON 分别写入 `logs/`、`videos/`、`results/`。
+  - 支持 `EVO1_LIBERO_RUN_DIR=/path/to/run`，将日志、视频、结果 JSON 和 run manifest 分别写入 `logs/`、`videos/`、`results/` 与 `run_manifest.json`。
   - 支持 `EVO1_LIBERO_DRY_RUN=1` 打印环境变量而不运行客户端。
 - 新增 `scripts/run_libero_eval.sh`
   - 固化正式 eval 默认配置：4 个 LIBERO suite、10 episodes、horizon 14、max steps `25,25,25,95`。
   - 支持 `EVO1_LIBERO_DRY_RUN=1` 打印环境变量而不运行客户端。
-  - 支持 `EVO1_LIBERO_RUN_DIR=/path/to/run`，将日志、视频、结果 JSON 分别写入 `logs/`、`videos/`、`results/`。
+  - 支持 `EVO1_LIBERO_RUN_DIR=/path/to/run`，将日志、视频、结果 JSON 和 run manifest 分别写入 `logs/`、`videos/`、`results/` 与 `run_manifest.json`。
+- 新增 `scripts/write_libero_run_manifest.py`
+  - 在 LIBERO smoke/eval 启动客户端前写出 manifest。
+  - 记录 run kind、Git commit/branch/dirty 状态、命令、Python 版本、输出路径和非敏感环境变量。
+  - 即使客户端崩溃或评估中断，也能留下本次运行的上下文。
 - 新增 `scripts/download_libero_checkpoint.sh`
   - 默认下载 `MINT-SJTU/Evo1_LIBERO` 到 `$EVO1_DATA_ROOT/checkpoints/Evo1_LIBERO`。
   - 默认不设置 `HF_ENDPOINT`，避免影响国内资源下载。
@@ -334,13 +340,14 @@ scripts/check_repo.sh
 本地结果：
 
 - `scripts/check_repo.sh`：通过
-- `pytest`：86 passed, 3 skipped
+- `pytest`：87 passed, 3 skipped
 - `scripts/audit_requirements.py`：通过；当前 Evo1 主环境和 dev 环境的浮动依赖都以 WARN 暴露，并已在 `requirements-policy.json` 登记理由
 - `scripts/preflight.py`：通过；仅提示默认训练数据路径不存在的 WARN（本地未放完整训练数据，非失败）
 - `bash -n scripts/*.sh`：通过
 - `EVO1_SETUP_LIBERO_DRY_RUN=1 scripts/setup_libero_env.sh`：通过，能在不创建 conda 环境、不下载 assets 的情况下打印解析后的路径
 - `EVO1_DOWNLOAD_LIBERO_CHECKPOINT_DRY_RUN=1 scripts/download_libero_checkpoint.sh`：通过，默认不设置 `HF_ENDPOINT`
 - `EVO1_LIBERO_DRY_RUN=1 EVO1_LIBERO_RUN_DIR=run_outputs/test_eval scripts/run_libero_eval.sh`：通过，输出路径解析到 `logs/`、`videos/`、`results/`
+- `python3 scripts/write_libero_run_manifest.py --output /tmp/... --run-kind smoke --repo-root "$PWD"`：通过，能写出非敏感运行上下文
 - `compileall`：通过
 - `git diff --check`：通过
 - `python3 -m ruff check .`：本地 Python 环境未安装 `ruff`；`scripts/check_repo.sh` 已按本地默认策略 WARN 后跳过，CI 会强制要求 `ruff`

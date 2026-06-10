@@ -46,6 +46,7 @@ def test_run_libero_smoke_script_uses_minimal_smoke_defaults():
     assert env["EVO1_LIBERO_HORIZON"] == "1"
     assert env["EVO1_LIBERO_CKPT_NAME"] == "Evo1_libero_smoke"
     assert env["EVO1_LIBERO_RESULT_FILE"].endswith("Evo1_libero_smoke_results.json")
+    assert env["EVO1_LIBERO_MANIFEST_FILE"].endswith("Evo1_libero_smoke_run_manifest.json")
 
 
 def test_run_libero_smoke_script_can_group_outputs_under_run_dir(tmp_path):
@@ -61,3 +62,4 @@ def test_run_libero_smoke_script_can_group_outputs_under_run_dir(tmp_path):
     assert env["EVO1_LIBERO_RESULT_FILE"] == str(
         run_dir / "results" / "Evo1_libero_smoke_results.json"
     )
+    assert env["EVO1_LIBERO_MANIFEST_FILE"] == str(run_dir / "run_manifest.json")

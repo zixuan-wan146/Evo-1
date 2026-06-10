@@ -182,7 +182,10 @@ LIBERO_PYTHON=/root/autodl-tmp/envs/libero/bin/python \
 scripts/run_libero_smoke.sh
 ```
 
-The run directory layout is `logs/`, `videos/`, and `results/`.
+The run directory layout is `logs/`, `videos/`, `results/`, and `run_manifest.json`.
+The manifest is written before the client starts, so failed or interrupted runs still keep the
+resolved LIBERO settings, output paths, Git commit, dirty state, command, Python version, and
+selected non-secret environment variables.
 
 Run the full default LIBERO evaluation when you are ready to collect comparable numbers:
 
@@ -209,6 +212,7 @@ export EVO1_LIBERO_TASK_SUITES=libero_spatial
 export EVO1_LIBERO_TASK_LIMIT=1
 export EVO1_LIBERO_MAX_STEPS=25
 export EVO1_LIBERO_RESULT_FILE="$PWD/LIBERO_evaluation/log_file/libero_spatial_results.json"
+export EVO1_LIBERO_MANIFEST_FILE="$PWD/LIBERO_evaluation/log_file/libero_spatial_run_manifest.json"
 LIBERO_PYTHON=/root/autodl-tmp/envs/libero/bin/python scripts/run_libero_smoke.sh
 ```
 

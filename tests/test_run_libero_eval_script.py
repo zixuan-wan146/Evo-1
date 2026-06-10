@@ -46,6 +46,7 @@ def test_run_libero_eval_script_uses_full_eval_defaults():
     assert env["EVO1_LIBERO_HORIZON"] == "14"
     assert env["EVO1_LIBERO_CKPT_NAME"] == "Evo1_libero_eval"
     assert env["EVO1_LIBERO_RESULT_FILE"].endswith("Evo1_libero_eval_results.json")
+    assert env["EVO1_LIBERO_MANIFEST_FILE"].endswith("Evo1_libero_eval_run_manifest.json")
 
 
 def test_run_libero_eval_script_preserves_explicit_overrides():
@@ -80,3 +81,4 @@ def test_run_libero_eval_script_can_group_outputs_under_run_dir(tmp_path):
     assert env["EVO1_LIBERO_RESULT_FILE"] == str(
         run_dir / "results" / "Evo1_libero_eval_results.json"
     )
+    assert env["EVO1_LIBERO_MANIFEST_FILE"] == str(run_dir / "run_manifest.json")
