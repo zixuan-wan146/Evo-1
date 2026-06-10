@@ -41,6 +41,7 @@ REQUIRED_REPO_FILES = (
     "LIBERO_evaluation/libero_client_4tasks.py",
     "scripts/preflight.py",
     "scripts/audit_requirements.py",
+    "scripts/check_repo.sh",
     "scripts/setup_libero_env.sh",
     "scripts/start_evo1_server.sh",
     "scripts/export_unpushed_commits.sh",

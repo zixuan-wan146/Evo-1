@@ -45,15 +45,16 @@ Install the lightweight development dependencies from the repository root:
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest
-find scripts -name "*.sh" -print0 | xargs -0 bash -n
-python scripts/audit_requirements.py
-python scripts/preflight.py
-python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation scripts tests
+scripts/check_repo.sh
 ```
 
 The lightweight tests avoid downloading model weights. Tests that require PyTorch are skipped when
 PyTorch is not installed.
+
+`scripts/check_repo.sh` runs the local quality gate: dependency policy audit, unit tests, optional
+`ruff`, shell syntax checks, repository preflight, LIBERO setup dry-run, `compileall`, and
+`git diff --check`. Set `EVO1_CHECK_REQUIRE_RUFF=1` in CI or a fully prepared dev environment to
+make missing `ruff` fail instead of warn.
 
 `scripts/audit_requirements.py` fails when a new `requirements*.txt` file is not covered by
 `requirements-policy.json`, or when a dependency is left unpinned without an explicit reason.
