@@ -448,6 +448,22 @@ def resolve_libero_manifest_paths(raw_inputs: list[str]) -> list[Path]:
     return sorted(path.resolve() for path in paths)
 
 
+def resolve_libero_run_dirs(raw_inputs: list[str]) -> list[Path]:
+    paths: set[Path] = set()
+    for raw_input in raw_inputs:
+        matches = glob.glob(raw_input, recursive=True)
+        candidate_paths = matches if matches else [raw_input]
+        for candidate in candidate_paths:
+            path = Path(candidate).expanduser()
+            if path.is_dir():
+                paths.add(path)
+            elif path.exists():
+                raise NotADirectoryError(f"LIBERO run path is not a directory: {candidate}")
+            else:
+                raise FileNotFoundError(f"LIBERO run directory not found: {raw_input}")
+    return sorted(path.resolve() for path in paths)
+
+
 def check_libero_result_file(result_path: Path, report: Report) -> None:
     if not result_path.exists():
         report.fail("libero-result", f"result file does not exist: {result_path}")
@@ -571,6 +587,65 @@ def check_libero_manifest_file(manifest_path: Path, report: Report) -> None:
     run_kind = payload["run_kind"]
     ckpt_name = payload["libero"]["EVO1_LIBERO_CKPT_NAME"]
     report.ok("libero-manifest", f"{manifest_path} describes {run_kind} run {ckpt_name!r}")
+
+
+def check_libero_run_dir(run_dir: Path, report: Report) -> None:
+    if not run_dir.exists():
+        report.fail("libero-run", f"run directory does not exist: {run_dir}")
+        return
+    if not run_dir.is_dir():
+        report.fail("libero-run", f"run path is not a directory: {run_dir}")
+        return
+
+    manifest_path = _discover_single_run_manifest(run_dir)
+    if manifest_path is None:
+        report.fail("libero-run", f"no run manifest found directly under {run_dir}")
+        return
+    if isinstance(manifest_path, list):
+        rendered = ", ".join(str(path.name) for path in manifest_path)
+        report.fail("libero-run", f"multiple run manifests found directly under {run_dir}: {rendered}")
+        return
+
+    failure_count = _failure_count(report)
+    check_libero_manifest_file(manifest_path, report)
+    if _failure_count(report) > failure_count:
+        return
+
+    manifest = _load_json_object(manifest_path)
+    if manifest is None:
+        report.fail("libero-run", f"{manifest_path} could not be reloaded after manifest validation")
+        return
+
+    libero = manifest["libero"]
+    manifest_reference = _resolve_artifact_reference(run_dir, str(libero["EVO1_LIBERO_MANIFEST_FILE"]))
+    if manifest_reference != manifest_path.resolve():
+        report.fail(
+            "libero-run",
+            f"{manifest_path} records EVO1_LIBERO_MANIFEST_FILE={manifest_reference}, expected {manifest_path.resolve()}",
+        )
+        return
+
+    result_path = _resolve_artifact_reference(run_dir, str(libero["EVO1_LIBERO_RESULT_FILE"]))
+    if not result_path.exists():
+        report.fail("libero-run", f"referenced result file does not exist: {result_path}")
+        return
+
+    failure_count = _failure_count(report)
+    check_libero_result_file(result_path, report)
+    if _failure_count(report) > failure_count:
+        return
+
+    result_payload = _load_json_object(result_path)
+    if result_payload is None:
+        report.fail("libero-run", f"{result_path} could not be reloaded after result validation")
+        return
+
+    consistency_error = _validate_libero_run_consistency(manifest, result_payload)
+    if consistency_error:
+        report.fail("libero-run", f"{run_dir}: {consistency_error}")
+        return
+
+    report.ok("libero-run", f"{run_dir} has consistent manifest and result artifacts")
 
 
 def _validate_libero_summary(summary: dict[str, Any], label: str) -> str | None:
@@ -706,6 +781,70 @@ def _validate_manifest_libero_env(libero: dict[str, Any]) -> str | None:
     return None
 
 
+def _discover_single_run_manifest(run_dir: Path) -> Path | list[Path] | None:
+    candidates = []
+    direct_manifest = run_dir / "run_manifest.json"
+    if direct_manifest.exists():
+        candidates.append(direct_manifest)
+    candidates.extend(sorted(run_dir.glob("*_run_manifest.json")))
+    unique_candidates = sorted({path.resolve() for path in candidates})
+    if not unique_candidates:
+        return None
+    if len(unique_candidates) > 1:
+        return unique_candidates
+    return unique_candidates[0]
+
+
+def _resolve_artifact_reference(run_dir: Path, value: str) -> Path:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = run_dir / path
+    return path.resolve()
+
+
+def _load_json_object(path: Path) -> dict[str, Any] | None:
+    try:
+        with path.open("r") as f:
+            payload = json.load(f)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _failure_count(report: Report) -> int:
+    return sum(1 for result in report.results if result.level == "FAIL")
+
+
+def _validate_libero_run_consistency(
+    manifest: dict[str, Any],
+    result_payload: dict[str, Any],
+) -> str | None:
+    manifest_libero = manifest["libero"]
+    manifest_metadata = manifest["metadata"]
+    result_config = result_payload.get("config", {})
+    result_metadata = result_payload.get("metadata", {})
+
+    if isinstance(result_config, dict):
+        result_ckpt_name = result_config.get("ckpt_name")
+        manifest_ckpt_name = manifest_libero["EVO1_LIBERO_CKPT_NAME"]
+        if result_ckpt_name and str(result_ckpt_name) != manifest_ckpt_name:
+            return (
+                f"result config ckpt_name={result_ckpt_name!r} does not match "
+                f"manifest EVO1_LIBERO_CKPT_NAME={manifest_ckpt_name!r}"
+            )
+
+    manifest_git = manifest_metadata.get("git", {}) if isinstance(manifest_metadata, dict) else {}
+    result_git = result_metadata.get("git", {}) if isinstance(result_metadata, dict) else {}
+    if isinstance(manifest_git, dict) and isinstance(result_git, dict):
+        for field in ("commit", "is_dirty"):
+            manifest_value = manifest_git.get(field)
+            result_value = result_git.get(field)
+            if manifest_value is not None and result_value is not None and manifest_value != result_value:
+                return f"result metadata git.{field}={result_value!r} does not match manifest git.{field}={manifest_value!r}"
+
+    return None
+
+
 def _validate_no_sensitive_environment(environment: dict[str, Any]) -> str | None:
     for key in environment:
         if any(fragment in key.upper() for fragment in SENSITIVE_ENV_FRAGMENTS):
@@ -806,6 +945,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=[],
         help="Optional LIBERO run manifest file, directory, or glob to validate. Can be passed multiple times.",
     )
+    parser.add_argument(
+        "--libero-run-dir",
+        action="append",
+        default=[],
+        help="Optional LIBERO run directory or glob to validate as a complete run artifact. Can be passed multiple times.",
+    )
     parser.add_argument("--skip-shell-syntax", action="store_true", help="Skip bash -n checks for scripts/*.sh.")
     return parser.parse_args(argv)
 
@@ -850,6 +995,18 @@ def run_preflight(args: argparse.Namespace) -> Report:
                 report.fail("libero-manifest", "no LIBERO run manifest files matched")
             for manifest_path in libero_manifest_paths:
                 check_libero_manifest_file(manifest_path, report)
+
+    libero_run_dir_inputs = getattr(args, "libero_run_dir", [])
+    if libero_run_dir_inputs:
+        try:
+            libero_run_dirs = resolve_libero_run_dirs(libero_run_dir_inputs)
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            report.fail("libero-run", str(exc))
+        else:
+            if not libero_run_dirs:
+                report.fail("libero-run", "no LIBERO run directories matched")
+            for run_dir in libero_run_dirs:
+                check_libero_run_dir(run_dir, report)
 
     if args.check_imports in ("evo1", "all"):
         check_imports(EVO1_RUNTIME_IMPORTS, report, "evo1-imports")

@@ -262,6 +262,17 @@ The result check verifies both schema and consistency between overall/per-suite 
 episode records. The manifest check verifies run kind, key LIBERO settings, Git metadata, and that
 recorded environment variables do not include common secret fields.
 
+If the run used `EVO1_LIBERO_RUN_DIR`, validate the whole run directory instead:
+
+```bash
+python scripts/preflight.py \
+  --dataset-config "" \
+  --libero-run-dir /root/autodl-tmp/evo1_runs/libero_smoke_001
+```
+
+The run-directory check validates both files and verifies that the manifest points to the result
+JSON from the same run, with matching checkpoint name and Git metadata.
+
 For a strict training-data check, add `--strict-data` after downloading the dataset.
 
 ## Training

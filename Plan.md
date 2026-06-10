@@ -14,9 +14,9 @@
   - `User root`
   - `IdentityFile /home/myser/.ssh/id_ed25519_autodl`
 - GitHub 推送状态：
-  - 本地提交已完成，但本地 `main` 仍领先 `origin/main` 30 个提交。
-  - 最新本地提交主题：`Validate LIBERO run manifests`。
-  - 最新未推送补丁包：`exports/unpushed_commits_20260610T185000Z`。
+  - 本地提交已完成，但本地 `main` 仍领先 `origin/main` 31 个提交。
+  - 最新本地提交主题：`Validate LIBERO run directories`。
+  - 最新未推送补丁包：`exports/unpushed_commits_20260610T185500Z`。
   - `git push origin main` 失败，原因是当前凭据 `myserendipity137` 没有 `zixuan-wan146/Evo-1.git` 写权限。
   - 需要给该账号写权限，或提供有权限的新 remote。
 - 服务器状态：
@@ -59,6 +59,7 @@
 - `Group LIBERO run artifacts`（本轮新增，支持 `EVO1_LIBERO_RUN_DIR` 统一管理 smoke/eval 输出）
 - `Record LIBERO run manifests`（本轮新增，LIBERO smoke/eval 启动前写出 run manifest）
 - `Validate LIBERO run manifests`（本轮新增，preflight 可校验 run manifest 结构和敏感字段）
+- `Validate LIBERO run directories`（本轮新增，preflight 可校验 run manifest 与 result JSON 一致性）
 
 服务器对应提交：
 
@@ -68,7 +69,7 @@
 - `Complete LIBERO remote smoke setup`（服务器本轮新增，内容与本地等价）
 
 服务器提交哈希不同是因为通过 `git format-patch | git am` 应用，内容等价但提交对象不同。
-最新一次 `git push origin main` 在提交 `Validate LIBERO run manifests` 后仍失败：当前 GitHub 凭据 `myserendipity137` 对 `zixuan-wan146/Evo-1.git` 没有写权限。
+最新一次 `git push origin main` 在提交 `Validate LIBERO run directories` 后仍失败：当前 GitHub 凭据 `myserendipity137` 对 `zixuan-wan146/Evo-1.git` 没有写权限。
 
 ## 已完成的工程改造
 
@@ -193,6 +194,7 @@
 - 新增用 `scripts/preflight.py --libero-result` 校验评估结果文件的说明。
 - 新增 LIBERO result 校验会比较 overall/per-suite summary 与 episode 明细一致性的说明。
 - 新增用 `scripts/preflight.py --libero-manifest` 校验 LIBERO run manifest 的说明。
+- 新增用 `scripts/preflight.py --libero-run-dir` 校验完整 LIBERO run 目录的说明。
 - 新增 checkpoint preflight 会检查 `config.json` 关键维度和 `norm_stats.json` min/max 结构的说明。
 - 新增 `scripts/start_evo1_server.sh` 默认先跑 checkpoint preflight、可用 `EVO1_SKIP_PREFLIGHT=1` 跳过的说明。
 - 新增 `scripts/run_libero_eval.sh` 正式 LIBERO eval 入口和 dry-run 说明。
@@ -216,6 +218,7 @@
   - 可选严格检查数据文件：`--strict-data`。
   - 可选检查 LIBERO result JSON 文件、目录或 glob：`--libero-result path_or_glob`，包括 schema 和 summary/episode 一致性。
   - 可选检查 LIBERO run manifest 文件、目录或 glob：`--libero-manifest path_or_glob`，包括 run kind、关键环境变量、Git metadata 和敏感字段过滤。
+  - 可选检查 LIBERO run 目录或 glob：`--libero-run-dir path_or_glob`，包括 manifest、result JSON、checkpoint name 和 Git metadata 的交叉一致性。
 - 新增 `scripts/setup_libero_env.sh`
   - 创建/复用 LIBERO Python 3.8.13 conda prefix env。
   - 默认从 `requirements-libero.txt` 安装 LIBERO 顶层依赖。
@@ -343,7 +346,7 @@ scripts/check_repo.sh
 本地结果：
 
 - `scripts/check_repo.sh`：通过
-- `pytest`：92 passed, 3 skipped
+- `pytest`：97 passed, 3 skipped
 - `scripts/audit_requirements.py`：通过；当前 Evo1 主环境和 dev 环境的浮动依赖都以 WARN 暴露，并已在 `requirements-policy.json` 登记理由
 - `scripts/preflight.py`：通过；仅提示默认训练数据路径不存在的 WARN（本地未放完整训练数据，非失败）
 - `bash -n scripts/*.sh`：通过
@@ -353,6 +356,7 @@ scripts/check_repo.sh
 - `python3 scripts/write_libero_run_manifest.py --output /tmp/... --run-kind smoke --repo-root "$PWD"`：通过，能写出非敏感运行上下文
 - `python3 -m pytest tests/test_preflight.py tests/test_write_libero_run_manifest.py`：通过，覆盖 LIBERO run manifest 校验
 - `python3 scripts/preflight.py --dataset-config "" --libero-manifest /tmp/evo1_manifest_check/run_manifest.json`：通过，能校验真实写出的 manifest
+- `python3 scripts/preflight.py --dataset-config "" --libero-run-dir /tmp/evo1_run_dir_check`：通过，能校验 run manifest 与 result JSON 的一致性
 - `compileall`：通过
 - `git diff --check`：通过
 - `python3 -m ruff check .`：本地 Python 环境未安装 `ruff`；`scripts/check_repo.sh` 已按本地默认策略 WARN 后跳过，CI 会强制要求 `ruff`

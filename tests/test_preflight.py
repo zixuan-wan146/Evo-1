@@ -142,6 +142,30 @@ def valid_norm_stats() -> dict:
     }
 
 
+def write_valid_libero_run_dir(tmp_path: Path) -> Path:
+    run_dir = tmp_path / "libero_run"
+    result_file = run_dir / "results" / "smoke_results.json"
+    manifest_file = run_dir / "run_manifest.json"
+    result_file.parent.mkdir(parents=True)
+    (run_dir / "logs").mkdir()
+    (run_dir / "videos").mkdir()
+
+    result_payload = valid_libero_result_payload()
+    manifest_payload = valid_libero_manifest_payload()
+    manifest_payload["libero"].update(
+        {
+            "EVO1_LIBERO_LOG_DIR": str(run_dir / "logs"),
+            "EVO1_LIBERO_VIDEO_DIR": str(run_dir / "videos"),
+            "EVO1_LIBERO_LOG_FILE": str(run_dir / "logs" / "smoke.txt"),
+            "EVO1_LIBERO_RESULT_FILE": str(result_file),
+            "EVO1_LIBERO_MANIFEST_FILE": str(manifest_file),
+        }
+    )
+    result_file.write_text(json.dumps(result_payload))
+    manifest_file.write_text(json.dumps(manifest_payload))
+    return run_dir
+
+
 def test_checkpoint_validation_accepts_required_files(tmp_path):
     preflight = load_preflight_module()
     ckpt_dir = tmp_path / "ckpt"
@@ -287,6 +311,7 @@ def test_run_preflight_accepts_libero_result_directory(tmp_path):
         check_imports="none",
         libero_result=[str(result_dir)],
         libero_manifest=[],
+        libero_run_dir=[],
         skip_shell_syntax=True,
     )
 
@@ -364,6 +389,7 @@ def test_run_preflight_accepts_libero_manifest_directory(tmp_path):
         check_imports="none",
         libero_result=[],
         libero_manifest=[str(run_dir)],
+        libero_run_dir=[],
         skip_shell_syntax=True,
     )
 
@@ -371,6 +397,82 @@ def test_run_preflight_accepts_libero_manifest_directory(tmp_path):
 
     assert not report.has_failures
     assert any(result.name == "libero-manifest" and result.level == "OK" for result in report.results)
+
+
+def test_libero_run_dir_validation_accepts_consistent_run_dir(tmp_path):
+    preflight = load_preflight_module()
+    run_dir = write_valid_libero_run_dir(tmp_path)
+
+    report = preflight.Report()
+    preflight.check_libero_run_dir(run_dir, report)
+
+    assert not report.has_failures
+    assert any(result.name == "libero-run" and result.level == "OK" for result in report.results)
+
+
+def test_libero_run_dir_validation_rejects_missing_result_file(tmp_path):
+    preflight = load_preflight_module()
+    run_dir = write_valid_libero_run_dir(tmp_path)
+    (run_dir / "results" / "smoke_results.json").unlink()
+
+    report = preflight.Report()
+    preflight.check_libero_run_dir(run_dir, report)
+
+    assert report.has_failures
+    assert "referenced result file does not exist" in report.results[-1].message
+
+
+def test_libero_run_dir_validation_rejects_manifest_path_mismatch(tmp_path):
+    preflight = load_preflight_module()
+    run_dir = write_valid_libero_run_dir(tmp_path)
+    manifest_file = run_dir / "run_manifest.json"
+    payload = json.loads(manifest_file.read_text())
+    payload["libero"]["EVO1_LIBERO_MANIFEST_FILE"] = str(run_dir / "other_manifest.json")
+    manifest_file.write_text(json.dumps(payload))
+
+    report = preflight.Report()
+    preflight.check_libero_run_dir(run_dir, report)
+
+    assert report.has_failures
+    assert "EVO1_LIBERO_MANIFEST_FILE" in report.results[-1].message
+
+
+def test_libero_run_dir_validation_rejects_git_mismatch(tmp_path):
+    preflight = load_preflight_module()
+    run_dir = write_valid_libero_run_dir(tmp_path)
+    result_file = run_dir / "results" / "smoke_results.json"
+    payload = json.loads(result_file.read_text())
+    payload["metadata"]["git"]["commit"] = "different"
+    result_file.write_text(json.dumps(payload))
+
+    report = preflight.Report()
+    preflight.check_libero_run_dir(run_dir, report)
+
+    assert report.has_failures
+    assert "git.commit" in report.results[-1].message
+
+
+def test_run_preflight_accepts_libero_run_dir(tmp_path):
+    preflight = load_preflight_module()
+    repo_root = Path(__file__).resolve().parents[1]
+    run_dir = write_valid_libero_run_dir(tmp_path)
+    args = argparse.Namespace(
+        repo_root=str(repo_root),
+        checkpoint=None,
+        dataset_config="",
+        dataset_base_dir="Evo_1",
+        strict_data=False,
+        check_imports="none",
+        libero_result=[],
+        libero_manifest=[],
+        libero_run_dir=[str(run_dir)],
+        skip_shell_syntax=True,
+    )
+
+    report = preflight.run_preflight(args)
+
+    assert not report.has_failures
+    assert any(result.name == "libero-run" and result.level == "OK" for result in report.results)
 
 
 def test_dataset_config_validation_accepts_repo_default_without_strict_data():
@@ -426,6 +528,7 @@ def test_run_preflight_default_has_no_failures():
         check_imports="none",
         libero_result=[],
         libero_manifest=[],
+        libero_run_dir=[],
         skip_shell_syntax=False,
     )
 
