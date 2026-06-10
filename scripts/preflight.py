@@ -44,6 +44,7 @@ REQUIRED_REPO_FILES = (
     "scripts/preflight.py",
     "scripts/audit_requirements.py",
     "scripts/check_repo.sh",
+    "scripts/download_libero_checkpoint.sh",
     "scripts/validate_training_dataset.py",
     "scripts/setup_libero_env.sh",
     "scripts/start_evo1_server.sh",

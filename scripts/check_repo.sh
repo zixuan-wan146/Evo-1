@@ -75,6 +75,9 @@ run_ruff
 check_shell_syntax
 run_step "Repository preflight" "$python_bin" scripts/preflight.py
 run_step "LIBERO setup dry-run" env EVO1_SETUP_LIBERO_DRY_RUN=1 "$script_dir/setup_libero_env.sh"
+run_step \
+  "LIBERO checkpoint download dry-run" \
+  env EVO1_DOWNLOAD_LIBERO_CHECKPOINT_DRY_RUN=1 "$script_dir/download_libero_checkpoint.sh"
 
 if [ "${EVO1_CHECK_SKIP_COMPILE:-0}" = "1" ]; then
   log "Skipping compileall because EVO1_CHECK_SKIP_COMPILE=1"

@@ -53,6 +53,7 @@
 - `Audit requirements drift`（本轮新增，新增 requirements 策略审计，防止未登记浮动依赖继续扩散）
 - `Add consolidated repository check`（本轮新增，用 `scripts/check_repo.sh` 统一本地和 CI 轻量门禁）
 - `Validate training dataset structure`（本轮新增，新增训练数据结构验证脚本和 strict-data 结构检查）
+- `Add LIBERO checkpoint downloader`（本轮新增，固化 LIBERO checkpoint 下载入口，默认不设置镜像源）
 
 服务器对应提交：
 
@@ -194,6 +195,7 @@
 - 新增 `requirements-policy.json` 和 `scripts/audit_requirements.py`，要求新增 requirements 文件和未固定依赖必须登记策略理由。
 - 新增 `scripts/check_repo.sh`，README 和 CI 都改为使用同一个仓库检查入口。
 - 新增 `scripts/validate_training_dataset.py`，训练前可检查 meta、stats、parquet 和视频路径。
+- 新增 `scripts/download_libero_checkpoint.sh`，替代手写 `hf download MINT-SJTU/Evo1_LIBERO`。
 - 记录 `HF_HOME`、`HUGGINGFACE_HUB_CACHE`、`PIP_CACHE_DIR`、`TMPDIR` 等数据盘路径建议。
 - 记录 `flash-attn` cross-device link 安装问题的处理方式。
 
@@ -225,6 +227,11 @@
 - 新增 `scripts/run_libero_eval.sh`
   - 固化正式 eval 默认配置：4 个 LIBERO suite、10 episodes、horizon 14、max steps `25,25,25,95`。
   - 支持 `EVO1_LIBERO_DRY_RUN=1` 打印环境变量而不运行客户端。
+- 新增 `scripts/download_libero_checkpoint.sh`
+  - 默认下载 `MINT-SJTU/Evo1_LIBERO` 到 `$EVO1_DATA_ROOT/checkpoints/Evo1_LIBERO`。
+  - 默认不设置 `HF_ENDPOINT`，避免影响国内资源下载。
+  - 如需外网 Hugging Face 加速，只通过单条命令设置 `EVO1_HF_ENDPOINT=https://hf-mirror.com`。
+  - 支持 `EVO1_DOWNLOAD_LIBERO_CHECKPOINT_DRY_RUN=1` 打印最终下载命令而不联网。
 - 新增 `scripts/export_unpushed_commits.sh`
   - 默认以 `origin/main` 为基线导出本地领先提交。
   - 默认输出到 `exports/unpushed_commits_<UTC time>/`。
@@ -235,7 +242,7 @@
   - 未固定版本的依赖如果没有策略理由会失败。
   - 已固定的 LIBERO 依赖保持严格检查；Evo1 主环境当前浮动项以 WARN 暴露并登记为后续锁版本任务。
 - 新增 `scripts/check_repo.sh`
-  - 统一运行 requirements 审计、pytest、ruff、shell 语法、preflight、LIBERO setup dry-run、compileall 和 whitespace 检查。
+  - 统一运行 requirements 审计、pytest、ruff、shell 语法、preflight、LIBERO setup dry-run、LIBERO checkpoint download dry-run、compileall 和 whitespace 检查。
   - 本地默认缺少 `ruff` 时 WARN 后继续，CI 使用 `EVO1_CHECK_REQUIRE_RUFF=1` 强制失败。
   - 支持 `EVO1_CHECK_DRY_RUN=1`、`EVO1_CHECK_SKIP_PYTEST=1`、`EVO1_CHECK_SKIP_COMPILE=1`、`EVO1_CHECK_SKIP_RUFF=1`。
 - 新增 `scripts/validate_training_dataset.py`
@@ -320,11 +327,12 @@ scripts/check_repo.sh
 本地结果：
 
 - `scripts/check_repo.sh`：通过
-- `pytest`：81 passed, 3 skipped
+- `pytest`：83 passed, 3 skipped
 - `scripts/audit_requirements.py`：通过；当前 Evo1 主环境和 dev 环境的浮动依赖都以 WARN 暴露，并已在 `requirements-policy.json` 登记理由
 - `scripts/preflight.py`：通过；仅提示默认训练数据路径不存在的 WARN（本地未放完整训练数据，非失败）
 - `bash -n scripts/*.sh`：通过
 - `EVO1_SETUP_LIBERO_DRY_RUN=1 scripts/setup_libero_env.sh`：通过，能在不创建 conda 环境、不下载 assets 的情况下打印解析后的路径
+- `EVO1_DOWNLOAD_LIBERO_CHECKPOINT_DRY_RUN=1 scripts/download_libero_checkpoint.sh`：通过，默认不设置 `HF_ENDPOINT`
 - `compileall`：通过
 - `git diff --check`：通过
 - `python3 -m ruff check .`：本地 Python 环境未安装 `ruff`；`scripts/check_repo.sh` 已按本地默认策略 WARN 后跳过，CI 会强制要求 `ruff`

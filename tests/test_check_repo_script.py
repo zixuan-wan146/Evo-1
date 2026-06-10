@@ -37,6 +37,7 @@ def test_check_repo_dry_run_lists_default_gates():
     assert "DRY-RUN shell syntax:" in output
     assert "DRY-RUN Repository preflight:" in output
     assert "DRY-RUN LIBERO setup dry-run:" in output
+    assert "DRY-RUN LIBERO checkpoint download dry-run:" in output
     assert "DRY-RUN Python compileall:" in output
     assert "DRY-RUN Git whitespace check:" in output
 

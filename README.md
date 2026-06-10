@@ -52,9 +52,9 @@ The lightweight tests avoid downloading model weights. Tests that require PyTorc
 PyTorch is not installed.
 
 `scripts/check_repo.sh` runs the local quality gate: dependency policy audit, unit tests, optional
-`ruff`, shell syntax checks, repository preflight, LIBERO setup dry-run, `compileall`, and
-`git diff --check`. Set `EVO1_CHECK_REQUIRE_RUFF=1` in CI or a fully prepared dev environment to
-make missing `ruff` fail instead of warn.
+`ruff`, shell syntax checks, repository preflight, LIBERO setup dry-run, LIBERO checkpoint download
+dry-run, `compileall`, and `git diff --check`. Set `EVO1_CHECK_REQUIRE_RUFF=1` in CI or a fully
+prepared dev environment to make missing `ruff` fail instead of warn.
 
 `scripts/audit_requirements.py` fails when a new `requirements*.txt` file is not covered by
 `requirements-policy.json`, or when a dependency is left unpinned without an explicit reason.
@@ -151,7 +151,7 @@ LIBERO dependency set.
 Download the checkpoint:
 
 ```bash
-hf download MINT-SJTU/Evo1_LIBERO --local-dir /path/to/checkpoint
+EVO1_DATA_ROOT=/root/autodl-tmp scripts/download_libero_checkpoint.sh
 ```
 
 Start the Evo-1 server:
@@ -163,6 +163,9 @@ scripts/start_evo1_server.sh /path/to/checkpoint
 
 `scripts/start_evo1_server.sh` runs a lightweight checkpoint preflight before loading the model.
 Set `EVO1_SKIP_PREFLIGHT=1` only when deliberately bypassing that check for debugging.
+`scripts/download_libero_checkpoint.sh` writes to `$EVO1_DATA_ROOT/checkpoints/Evo1_LIBERO` by
+default. It does not set a Hugging Face mirror by default; if a single external download needs one,
+use `EVO1_HF_ENDPOINT=https://hf-mirror.com` only on that command.
 
 Run the minimal LIBERO smoke client from another shell:
 
