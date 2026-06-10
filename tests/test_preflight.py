@@ -73,12 +73,36 @@ def valid_libero_result_payload() -> dict:
     }
 
 
+def valid_checkpoint_config() -> dict:
+    return {
+        "horizon": 14,
+        "per_action_dim": 7,
+        "state_dim": 7,
+        "action_dim": 98,
+    }
+
+
+def valid_norm_stats() -> dict:
+    return {
+        "libero": {
+            "observation.state": {
+                "min": [0.0, -1.0, -2.0],
+                "max": [1.0, 2.0, 3.0],
+            },
+            "action": {
+                "min": [-1.0] * 7,
+                "max": [1.0] * 7,
+            },
+        }
+    }
+
+
 def test_checkpoint_validation_accepts_required_files(tmp_path):
     preflight = load_preflight_module()
     ckpt_dir = tmp_path / "ckpt"
     ckpt_dir.mkdir()
-    (ckpt_dir / "config.json").write_text(json.dumps({"horizon": 14}))
-    (ckpt_dir / "norm_stats.json").write_text(json.dumps({"state": {}}))
+    (ckpt_dir / "config.json").write_text(json.dumps(valid_checkpoint_config()))
+    (ckpt_dir / "norm_stats.json").write_text(json.dumps(valid_norm_stats()))
     (ckpt_dir / "mp_rank_00_model_states.pt").write_bytes(b"checkpoint")
 
     report = preflight.Report()
@@ -99,6 +123,40 @@ def test_checkpoint_validation_rejects_missing_weight_file(tmp_path):
 
     assert report.has_failures
     assert "mp_rank_00_model_states.pt" in report.results[-1].message
+
+
+def test_checkpoint_validation_rejects_inconsistent_action_dim(tmp_path):
+    preflight = load_preflight_module()
+    ckpt_dir = tmp_path / "ckpt"
+    ckpt_dir.mkdir()
+    config = valid_checkpoint_config()
+    config["action_dim"] = 99
+    (ckpt_dir / "config.json").write_text(json.dumps(config))
+    (ckpt_dir / "norm_stats.json").write_text(json.dumps(valid_norm_stats()))
+    (ckpt_dir / "mp_rank_00_model_states.pt").write_bytes(b"checkpoint")
+
+    report = preflight.Report()
+    preflight.check_checkpoint_dir(ckpt_dir, report)
+
+    assert report.has_failures
+    assert "action_dim" in report.results[-1].message
+
+
+def test_checkpoint_validation_rejects_invalid_norm_stats(tmp_path):
+    preflight = load_preflight_module()
+    ckpt_dir = tmp_path / "ckpt"
+    ckpt_dir.mkdir()
+    stats = valid_norm_stats()
+    stats["libero"]["action"]["max"] = [1.0, 2.0]
+    (ckpt_dir / "config.json").write_text(json.dumps(valid_checkpoint_config()))
+    (ckpt_dir / "norm_stats.json").write_text(json.dumps(stats))
+    (ckpt_dir / "mp_rank_00_model_states.pt").write_bytes(b"checkpoint")
+
+    report = preflight.Report()
+    preflight.check_checkpoint_dir(ckpt_dir, report)
+
+    assert report.has_failures
+    assert "same length" in report.results[-1].message
 
 
 def test_libero_result_validation_accepts_valid_result_file(tmp_path):

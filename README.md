@@ -187,6 +187,9 @@ python scripts/preflight.py \
   --check-imports evo1
 ```
 
+The checkpoint check validates required files, basic `config.json` dimensions, and `norm_stats.json`
+state/action min-max structure without loading model weights.
+
 After evaluation, validate result JSON files before summarizing or syncing them:
 
 ```bash

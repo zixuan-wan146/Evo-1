@@ -5,6 +5,7 @@ import argparse
 import glob
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -21,6 +22,7 @@ from Evo_1.dataset.config_utils import (  # noqa: E402
     resolve_dataset_config_paths,
     validate_dataset_config_structure,
 )
+from Evo_1.runtime_config import TARGET_STATE_DIM  # noqa: E402
 
 
 REQUIRED_REPO_FILES = (
@@ -207,6 +209,7 @@ def check_checkpoint_dir(ckpt_dir: Path, report: Report) -> None:
         report.fail("checkpoint", f"missing required files in {ckpt_dir}: {', '.join(missing)}")
         return
 
+    payloads = {}
     for json_name in ("config.json", "norm_stats.json"):
         path = ckpt_dir / json_name
         try:
@@ -218,6 +221,17 @@ def check_checkpoint_dir(ckpt_dir: Path, report: Report) -> None:
         if not isinstance(payload, dict):
             report.fail("checkpoint", f"{json_name} must contain a JSON object")
             return
+        payloads[json_name] = payload
+
+    config_error = validate_checkpoint_config(payloads["config.json"])
+    if config_error:
+        report.fail("checkpoint", f"config.json: {config_error}")
+        return
+
+    stats_error = validate_norm_stats(payloads["norm_stats.json"])
+    if stats_error:
+        report.fail("checkpoint", f"norm_stats.json: {stats_error}")
+        return
 
     weight_path = ckpt_dir / "mp_rank_00_model_states.pt"
     if weight_path.stat().st_size == 0:
@@ -225,6 +239,88 @@ def check_checkpoint_dir(ckpt_dir: Path, report: Report) -> None:
         return
 
     report.ok("checkpoint", f"required checkpoint files are present in {ckpt_dir}")
+
+
+def validate_checkpoint_config(config: dict[str, Any], target_dim: int = TARGET_STATE_DIM) -> str | None:
+    positive_ints = {}
+    for key in ("horizon", "per_action_dim", "state_dim"):
+        value = config.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            return f"{key} must be a positive integer when present"
+        positive_ints[key] = value
+
+    per_action_dim = positive_ints.get("per_action_dim")
+    if per_action_dim is not None and per_action_dim > target_dim:
+        return f"per_action_dim {per_action_dim} exceeds server target dimension {target_dim}"
+
+    state_dim = positive_ints.get("state_dim")
+    if state_dim is not None and state_dim > target_dim:
+        return f"state_dim {state_dim} exceeds server target dimension {target_dim}"
+
+    action_dim = config.get("action_dim")
+    if action_dim is not None:
+        if not isinstance(action_dim, int) or isinstance(action_dim, bool) or action_dim <= 0:
+            return "action_dim must be a positive integer when present"
+        horizon = positive_ints.get("horizon")
+        if horizon is not None and per_action_dim is not None and action_dim != horizon * per_action_dim:
+            return (
+                f"action_dim {action_dim} must equal horizon {horizon} "
+                f"* per_action_dim {per_action_dim}"
+            )
+
+    return None
+
+
+def validate_norm_stats(stats: dict[str, Any], target_dim: int = TARGET_STATE_DIM) -> str | None:
+    if len(stats) != 1:
+        return f"expected one robot stats entry, got {len(stats)}"
+
+    robot_name, robot_stats = next(iter(stats.items()))
+    if not isinstance(robot_stats, dict):
+        return f"{robot_name} stats must be an object"
+
+    for stat_name in ("observation.state", "action"):
+        stat_error = _validate_minmax_stat(robot_stats, stat_name, target_dim)
+        if stat_error:
+            return f"{robot_name}.{stat_error}"
+
+    return None
+
+
+def _validate_minmax_stat(robot_stats: dict[str, Any], stat_name: str, target_dim: int) -> str | None:
+    stat = robot_stats.get(stat_name)
+    if not isinstance(stat, dict):
+        return f"{stat_name} must be an object with min/max"
+
+    mins = stat.get("min")
+    maxs = stat.get("max")
+    min_error = _validate_numeric_vector(mins, f"{stat_name}.min", target_dim)
+    if min_error:
+        return min_error
+    max_error = _validate_numeric_vector(maxs, f"{stat_name}.max", target_dim)
+    if max_error:
+        return max_error
+    if len(mins) != len(maxs):
+        return f"{stat_name}.min and max must have the same length"
+    for index, (min_value, max_value) in enumerate(zip(mins, maxs)):
+        if float(min_value) > float(max_value):
+            return f"{stat_name}.min[{index}] must be <= max[{index}]"
+    return None
+
+
+def _validate_numeric_vector(value: Any, label: str, target_dim: int) -> str | None:
+    if not isinstance(value, list) or not value:
+        return f"{label} must be a non-empty list"
+    if len(value) > target_dim:
+        return f"{label} length {len(value)} exceeds server target dimension {target_dim}"
+    for index, item in enumerate(value):
+        if not isinstance(item, (int, float)) or isinstance(item, bool):
+            return f"{label}[{index}] must be numeric"
+        if not math.isfinite(float(item)):
+            return f"{label}[{index}] must be finite"
+    return None
 
 
 def load_yaml_if_available(path: Path, report: Report) -> dict[str, Any] | None:
