@@ -61,7 +61,8 @@ def load_model_and_normalizer(ckpt_dir, device: str = "cuda", inference_steps: i
     config["num_inference_timesteps"] = inference_steps
 
     model = EVO1(config).eval()
-    checkpoint = torch.load(ckpt_path, map_location="cpu")
+    # DeepSpeed checkpoints include non-tensor metadata; load only trusted checkpoints.
+    checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     state_dict = checkpoint["module"] if "module" in checkpoint else checkpoint
     model.load_state_dict(state_dict, strict=True)
     model = model.to(device)

@@ -39,6 +39,19 @@ pip install -r requirements.txt
 MAX_JOBS=64 pip install -v flash-attn --no-build-isolation
 ```
 
+## Development Checks
+
+Install the lightweight development dependencies from the repository root:
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation tests
+```
+
+The lightweight tests avoid downloading model weights. Tests that require PyTorch are skipped when
+PyTorch is not installed.
+
 ## MetaWorld Evaluation
 
 Create a separate environment for MetaWorld:
@@ -73,6 +86,16 @@ python mt50_evo1_client_prompt.py
 
 The MetaWorld client uses `ws://127.0.0.1:9000` by default. Change `SERVER_URL` in
 `MetaWorld_evaluation/mt50_evo1_client_prompt.py` if you run the server elsewhere.
+
+Common MetaWorld client settings can also be overridden without editing source code:
+
+```bash
+export EVO1_SERVER_URI=ws://127.0.0.1:9000
+export EVO1_MT50_EPISODES=1
+export EVO1_MT50_EPISODE_HORIZON=100
+export EVO1_MT50_SAVE_VIDEO=false
+python mt50_evo1_client_prompt.py
+```
 
 ## LIBERO Evaluation
 
@@ -114,6 +137,16 @@ python libero_client_4tasks.py
 ```
 
 The LIBERO client stores logs and videos under `LIBERO_evaluation/`.
+
+Common LIBERO client settings can be overridden without editing source code:
+
+```bash
+export EVO1_SERVER_URI=ws://127.0.0.1:9000
+export EVO1_LIBERO_EPISODES=1
+export EVO1_LIBERO_TASK_SUITES=libero_spatial
+export EVO1_LIBERO_MAX_STEPS=25
+python libero_client_4tasks.py
+```
 
 ## Training
 
@@ -200,6 +233,36 @@ accelerate launch --num_processes 1 --num_machines 1 --deepspeed_config_file ds_
 ```
 
 Use `--cache_dir /path/to/cache` if you want the generated training cache outside the project directory.
+
+## Remote Deployment Notes
+
+On remote servers with a separate data disk, keep code, checkpoints, caches, and outputs outside the
+system disk. For example:
+
+```bash
+cd /root/autodl-tmp
+git clone https://github.com/zixuan-wan146/Evo-1.git
+export HF_ENDPOINT=https://hf-mirror.com
+export HF_HOME=/root/autodl-tmp/hf-home
+export HUGGINGFACE_HUB_CACHE=/root/autodl-tmp/hf-cache
+export PIP_CACHE_DIR=/root/autodl-tmp/pip-cache
+```
+
+Download checkpoints to the data disk:
+
+```bash
+hf download MINT-SJTU/Evo1_MetaWorld --local-dir /root/autodl-tmp/checkpoints/Evo1_MetaWorld --max-workers 1
+hf download MINT-SJTU/Evo1_LIBERO --local-dir /root/autodl-tmp/checkpoints/Evo1_LIBERO --max-workers 1
+```
+
+If `flash-attn` installation fails with a cross-device link error, set `TMPDIR` to the same data disk:
+
+```bash
+mkdir -p /root/autodl-tmp/tmp /root/autodl-tmp/pip-cache
+export TMPDIR=/root/autodl-tmp/tmp
+export PIP_CACHE_DIR=/root/autodl-tmp/pip-cache
+pip install flash-attn --no-build-isolation
+```
 
 ## Citation
 
