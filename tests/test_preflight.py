@@ -75,6 +75,49 @@ def valid_libero_result_payload() -> dict:
     }
 
 
+def valid_libero_manifest_payload() -> dict:
+    return {
+        "schema_version": 1,
+        "run_kind": "smoke",
+        "metadata": {
+            "created_at_utc": "2026-06-10T00:00:00Z",
+            "cwd": "/tmp/evo1",
+            "argv": ["scripts/write_libero_run_manifest.py"],
+            "command": "scripts/write_libero_run_manifest.py",
+            "python": {
+                "executable": "/usr/bin/python3",
+                "version": "3.10.0",
+            },
+            "platform": "Linux",
+            "hostname": "host",
+            "git": {
+                "repo_root": "/tmp/evo1",
+                "commit": "abc123",
+                "branch": "main",
+                "is_dirty": False,
+            },
+            "environment": {
+                "EVO1_LIBERO_CKPT_NAME": "smoke",
+            },
+        },
+        "libero": {
+            "EVO1_LIBERO_CKPT_NAME": "smoke",
+            "EVO1_LIBERO_LOG_DIR": "/tmp/evo1/run/logs",
+            "EVO1_LIBERO_VIDEO_DIR": "/tmp/evo1/run/videos",
+            "EVO1_LIBERO_LOG_FILE": "/tmp/evo1/run/logs/smoke.txt",
+            "EVO1_LIBERO_RESULT_FILE": "/tmp/evo1/run/results/smoke_results.json",
+            "EVO1_LIBERO_MANIFEST_FILE": "/tmp/evo1/run/run_manifest.json",
+            "EVO1_LIBERO_TASK_SUITES": "libero_spatial",
+            "EVO1_LIBERO_TASK_LIMIT": "1",
+            "EVO1_LIBERO_EPISODES": "1",
+            "EVO1_LIBERO_MAX_STEPS": "1",
+            "EVO1_LIBERO_HORIZON": "1",
+            "EVO1_SERVER_URI": "ws://127.0.0.1:9000",
+            "EVO1_MUJOCO_GL": "osmesa",
+        },
+    }
+
+
 def valid_checkpoint_config() -> dict:
     return {
         "horizon": 14,
@@ -243,6 +286,7 @@ def test_run_preflight_accepts_libero_result_directory(tmp_path):
         strict_data=False,
         check_imports="none",
         libero_result=[str(result_dir)],
+        libero_manifest=[],
         skip_shell_syntax=True,
     )
 
@@ -250,6 +294,83 @@ def test_run_preflight_accepts_libero_result_directory(tmp_path):
 
     assert not report.has_failures
     assert any(result.name == "libero-result" and result.level == "OK" for result in report.results)
+
+
+def test_libero_manifest_validation_accepts_valid_manifest(tmp_path):
+    preflight = load_preflight_module()
+    manifest_file = tmp_path / "run_manifest.json"
+    manifest_file.write_text(json.dumps(valid_libero_manifest_payload()))
+
+    report = preflight.Report()
+    preflight.check_libero_manifest_file(manifest_file, report)
+
+    assert result_levels(report) == ["OK"]
+
+
+def test_libero_manifest_validation_rejects_missing_libero_field(tmp_path):
+    preflight = load_preflight_module()
+    payload = valid_libero_manifest_payload()
+    del payload["libero"]["EVO1_LIBERO_RESULT_FILE"]
+    manifest_file = tmp_path / "run_manifest.json"
+    manifest_file.write_text(json.dumps(payload))
+
+    report = preflight.Report()
+    preflight.check_libero_manifest_file(manifest_file, report)
+
+    assert report.has_failures
+    assert "missing fields" in report.results[-1].message
+
+
+def test_libero_manifest_validation_rejects_secret_environment(tmp_path):
+    preflight = load_preflight_module()
+    payload = valid_libero_manifest_payload()
+    payload["metadata"]["environment"]["EVO1_TOKEN"] = "secret"
+    manifest_file = tmp_path / "run_manifest.json"
+    manifest_file.write_text(json.dumps(payload))
+
+    report = preflight.Report()
+    preflight.check_libero_manifest_file(manifest_file, report)
+
+    assert report.has_failures
+    assert "must not be recorded" in report.results[-1].message
+
+
+def test_libero_manifest_validation_rejects_invalid_numeric_config(tmp_path):
+    preflight = load_preflight_module()
+    payload = valid_libero_manifest_payload()
+    payload["libero"]["EVO1_LIBERO_HORIZON"] = "0"
+    manifest_file = tmp_path / "run_manifest.json"
+    manifest_file.write_text(json.dumps(payload))
+
+    report = preflight.Report()
+    preflight.check_libero_manifest_file(manifest_file, report)
+
+    assert report.has_failures
+    assert "EVO1_LIBERO_HORIZON" in report.results[-1].message
+
+
+def test_run_preflight_accepts_libero_manifest_directory(tmp_path):
+    preflight = load_preflight_module()
+    repo_root = Path(__file__).resolve().parents[1]
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "run_manifest.json").write_text(json.dumps(valid_libero_manifest_payload()))
+    args = argparse.Namespace(
+        repo_root=str(repo_root),
+        checkpoint=None,
+        dataset_config="",
+        dataset_base_dir="Evo_1",
+        strict_data=False,
+        check_imports="none",
+        libero_result=[],
+        libero_manifest=[str(run_dir)],
+        skip_shell_syntax=True,
+    )
+
+    report = preflight.run_preflight(args)
+
+    assert not report.has_failures
+    assert any(result.name == "libero-manifest" and result.level == "OK" for result in report.results)
 
 
 def test_dataset_config_validation_accepts_repo_default_without_strict_data():
@@ -304,6 +425,7 @@ def test_run_preflight_default_has_no_failures():
         strict_data=False,
         check_imports="none",
         libero_result=[],
+        libero_manifest=[],
         skip_shell_syntax=False,
     )
 

@@ -100,6 +100,24 @@ LIBERO_EPISODE_REQUIRED_FIELDS = (
     "control_steps",
 )
 
+LIBERO_MANIFEST_REQUIRED_ENV = (
+    "EVO1_LIBERO_CKPT_NAME",
+    "EVO1_LIBERO_LOG_DIR",
+    "EVO1_LIBERO_VIDEO_DIR",
+    "EVO1_LIBERO_LOG_FILE",
+    "EVO1_LIBERO_RESULT_FILE",
+    "EVO1_LIBERO_MANIFEST_FILE",
+    "EVO1_LIBERO_TASK_SUITES",
+    "EVO1_LIBERO_TASK_LIMIT",
+    "EVO1_LIBERO_EPISODES",
+    "EVO1_LIBERO_MAX_STEPS",
+    "EVO1_LIBERO_HORIZON",
+    "EVO1_SERVER_URI",
+    "EVO1_MUJOCO_GL",
+)
+
+SENSITIVE_ENV_FRAGMENTS = ("TOKEN", "SECRET", "PASSWORD", "KEY")
+
 
 @dataclass(frozen=True)
 class CheckResult:
@@ -413,6 +431,23 @@ def resolve_libero_result_paths(raw_inputs: list[str]) -> list[Path]:
     return sorted(path.resolve() for path in paths)
 
 
+def resolve_libero_manifest_paths(raw_inputs: list[str]) -> list[Path]:
+    paths: set[Path] = set()
+    for raw_input in raw_inputs:
+        matches = glob.glob(raw_input, recursive=True)
+        candidate_paths = matches if matches else [raw_input]
+        for candidate in candidate_paths:
+            path = Path(candidate).expanduser()
+            if path.is_dir():
+                paths.update(path.rglob("run_manifest.json"))
+                paths.update(path.rglob("*_run_manifest.json"))
+            elif path.is_file():
+                paths.add(path)
+            else:
+                raise FileNotFoundError(f"LIBERO run manifest path not found: {raw_input}")
+    return sorted(path.resolve() for path in paths)
+
+
 def check_libero_result_file(result_path: Path, report: Report) -> None:
     if not result_path.exists():
         report.fail("libero-result", f"result file does not exist: {result_path}")
@@ -509,6 +544,35 @@ def check_libero_result_file(result_path: Path, report: Report) -> None:
     report.ok("libero-result", f"{result_path} describes {len(episodes)} episode(s)")
 
 
+def check_libero_manifest_file(manifest_path: Path, report: Report) -> None:
+    if not manifest_path.exists():
+        report.fail("libero-manifest", f"manifest file does not exist: {manifest_path}")
+        return
+    if not manifest_path.is_file():
+        report.fail("libero-manifest", f"manifest path is not a file: {manifest_path}")
+        return
+
+    try:
+        with manifest_path.open("r") as f:
+            payload = json.load(f)
+    except json.JSONDecodeError as exc:
+        report.fail("libero-manifest", f"{manifest_path} is not valid JSON: {exc}")
+        return
+
+    if not isinstance(payload, dict):
+        report.fail("libero-manifest", f"{manifest_path} must contain a JSON object")
+        return
+
+    manifest_error = _validate_libero_manifest(payload)
+    if manifest_error:
+        report.fail("libero-manifest", f"{manifest_path}: {manifest_error}")
+        return
+
+    run_kind = payload["run_kind"]
+    ckpt_name = payload["libero"]["EVO1_LIBERO_CKPT_NAME"]
+    report.ok("libero-manifest", f"{manifest_path} describes {run_kind} run {ckpt_name!r}")
+
+
 def _validate_libero_summary(summary: dict[str, Any], label: str) -> str | None:
     required_fields = (*LIBERO_SUMMARY_COUNT_FIELDS, *LIBERO_SUMMARY_FLOAT_FIELDS)
     missing = [field for field in required_fields if field not in summary]
@@ -555,6 +619,115 @@ def _validate_libero_episode(episode: Any, index: int) -> str | None:
     if not episode["success"] and not str(episode.get("failure_reason", "")).strip():
         return f"episodes[{index}].failure_reason is required for failed episodes"
     return None
+
+
+def _validate_libero_manifest(payload: dict[str, Any]) -> str | None:
+    if payload.get("schema_version") != 1:
+        return "schema_version must be 1"
+    if payload.get("run_kind") not in {"smoke", "eval"}:
+        return "run_kind must be 'smoke' or 'eval'"
+
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, dict):
+        return "metadata must be an object"
+    metadata_error = _validate_run_metadata(metadata)
+    if metadata_error:
+        return f"metadata.{metadata_error}"
+
+    libero = payload.get("libero")
+    if not isinstance(libero, dict):
+        return "libero must be an object"
+    libero_error = _validate_manifest_libero_env(libero)
+    if libero_error:
+        return f"libero.{libero_error}"
+
+    return None
+
+
+def _validate_run_metadata(metadata: dict[str, Any]) -> str | None:
+    for field in ("created_at_utc", "cwd", "command", "platform", "hostname"):
+        if not isinstance(metadata.get(field), str) or not metadata[field]:
+            return f"{field} must be a non-empty string"
+    if not isinstance(metadata.get("argv"), list) or not all(isinstance(item, str) for item in metadata["argv"]):
+        return "argv must be a list of strings"
+
+    python_info = metadata.get("python")
+    if not isinstance(python_info, dict):
+        return "python must be an object"
+    for field in ("executable", "version"):
+        if not isinstance(python_info.get(field), str) or not python_info[field]:
+            return f"python.{field} must be a non-empty string"
+
+    git_info = metadata.get("git")
+    if not isinstance(git_info, dict):
+        return "git must be an object"
+    for field in ("repo_root", "commit", "branch"):
+        if not isinstance(git_info.get(field), str) or not git_info[field]:
+            return f"git.{field} must be a non-empty string"
+    if not isinstance(git_info.get("is_dirty"), bool):
+        return "git.is_dirty must be a boolean"
+
+    environment = metadata.get("environment")
+    if not isinstance(environment, dict):
+        return "environment must be an object"
+    env_error = _validate_no_sensitive_environment(environment)
+    if env_error:
+        return f"environment.{env_error}"
+    return None
+
+
+def _validate_manifest_libero_env(libero: dict[str, Any]) -> str | None:
+    missing = [field for field in LIBERO_MANIFEST_REQUIRED_ENV if field not in libero]
+    if missing:
+        return f"missing fields: {', '.join(missing)}"
+    for key, value in libero.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            return "all keys and values must be strings"
+        if not value:
+            return f"{key} must be non-empty"
+    env_error = _validate_no_sensitive_environment(libero)
+    if env_error:
+        return env_error
+
+    for field in ("EVO1_LIBERO_EPISODES", "EVO1_LIBERO_HORIZON"):
+        if _parse_positive_int(libero[field]) is None:
+            return f"{field} must be a positive integer string"
+    if _parse_non_negative_int(libero["EVO1_LIBERO_TASK_LIMIT"]) is None:
+        return "EVO1_LIBERO_TASK_LIMIT must be a non-negative integer string"
+    max_steps = [item.strip() for item in libero["EVO1_LIBERO_MAX_STEPS"].split(",")]
+    if not max_steps or any(_parse_positive_int(item) is None for item in max_steps):
+        return "EVO1_LIBERO_MAX_STEPS must be a comma-separated list of positive integers"
+    task_suites = [item.strip() for item in libero["EVO1_LIBERO_TASK_SUITES"].split(",")]
+    if not task_suites or any(not item for item in task_suites):
+        return "EVO1_LIBERO_TASK_SUITES must be a comma-separated list of suite names"
+    server_uri = libero["EVO1_SERVER_URI"]
+    if not (server_uri.startswith("ws://") or server_uri.startswith("wss://")):
+        return "EVO1_SERVER_URI must start with ws:// or wss://"
+    return None
+
+
+def _validate_no_sensitive_environment(environment: dict[str, Any]) -> str | None:
+    for key in environment:
+        if any(fragment in key.upper() for fragment in SENSITIVE_ENV_FRAGMENTS):
+            return f"{key} must not be recorded"
+    return None
+
+
+def _parse_positive_int(value: str) -> int | None:
+    parsed = _parse_non_negative_int(value)
+    if parsed is None or parsed <= 0:
+        return None
+    return parsed
+
+
+def _parse_non_negative_int(value: str) -> int | None:
+    try:
+        parsed = int(value)
+    except ValueError:
+        return None
+    if str(parsed) != value or parsed < 0:
+        return None
+    return parsed
 
 
 def _validate_libero_summary_matches_episodes(
@@ -627,6 +800,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=[],
         help="Optional LIBERO result JSON file, directory, or glob to validate. Can be passed multiple times.",
     )
+    parser.add_argument(
+        "--libero-manifest",
+        action="append",
+        default=[],
+        help="Optional LIBERO run manifest file, directory, or glob to validate. Can be passed multiple times.",
+    )
     parser.add_argument("--skip-shell-syntax", action="store_true", help="Skip bash -n checks for scripts/*.sh.")
     return parser.parse_args(argv)
 
@@ -659,6 +838,18 @@ def run_preflight(args: argparse.Namespace) -> Report:
                 report.fail("libero-result", "no LIBERO result files matched")
             for result_path in libero_result_paths:
                 check_libero_result_file(result_path, report)
+
+    libero_manifest_inputs = getattr(args, "libero_manifest", [])
+    if libero_manifest_inputs:
+        try:
+            libero_manifest_paths = resolve_libero_manifest_paths(libero_manifest_inputs)
+        except FileNotFoundError as exc:
+            report.fail("libero-manifest", str(exc))
+        else:
+            if not libero_manifest_paths:
+                report.fail("libero-manifest", "no LIBERO run manifest files matched")
+            for manifest_path in libero_manifest_paths:
+                check_libero_manifest_file(manifest_path, report)
 
     if args.check_imports in ("evo1", "all"):
         check_imports(EVO1_RUNTIME_IMPORTS, report, "evo1-imports")

@@ -249,16 +249,18 @@ python scripts/preflight.py \
 The checkpoint check validates required files, basic `config.json` dimensions, and `norm_stats.json`
 state/action min-max structure without loading model weights.
 
-After evaluation, validate result JSON files before summarizing or syncing them:
+After evaluation, validate result JSON files and run manifests before summarizing or syncing them:
 
 ```bash
 python scripts/preflight.py \
   --dataset-config "" \
-  --libero-result "LIBERO_evaluation/log_file/*_results.json"
+  --libero-result "LIBERO_evaluation/log_file/*_results.json" \
+  --libero-manifest "LIBERO_evaluation/log_file/*_run_manifest.json"
 ```
 
 The result check verifies both schema and consistency between overall/per-suite summaries and the
-episode records.
+episode records. The manifest check verifies run kind, key LIBERO settings, Git metadata, and that
+recorded environment variables do not include common secret fields.
 
 For a strict training-data check, add `--strict-data` after downloading the dataset.
 
