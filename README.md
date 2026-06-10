@@ -259,6 +259,18 @@ python scripts/check_libero_metrics.py /root/autodl-tmp/evo1_runs/candidate \
 The metric gate defaults to the `overall` scope. Add `--scope suite:libero_spatial` or repeat
 `--scope` to gate suite-level metrics.
 
+To generate a report bundle for a set of runs:
+
+```bash
+python scripts/report_libero_runs.py /root/autodl-tmp/evo1_runs \
+  --output-dir outputs/libero_report \
+  --min-success-rate 0.10 \
+  --min-total-episodes 10
+```
+
+The report directory contains run inventory tables, result summary tables, a report manifest, and a
+metric gate log when gate options are provided.
+
 For headless smoke tests, `EVO1_MUJOCO_GL=osmesa` is the more stable default. Use
 `EVO1_MUJOCO_GL=egl` on GPU servers when EGL cleanup warnings are acceptable and
 faster rendering is preferred.

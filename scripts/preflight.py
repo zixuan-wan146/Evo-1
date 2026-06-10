@@ -54,6 +54,7 @@ REQUIRED_REPO_FILES = (
     "scripts/write_libero_run_manifest.py",
     "scripts/summarize_libero_results.py",
     "scripts/check_libero_metrics.py",
+    "scripts/report_libero_runs.py",
 )
 
 REQUIRED_CHECKPOINT_FILES = (
