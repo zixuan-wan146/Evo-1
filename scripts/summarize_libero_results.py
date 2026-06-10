@@ -26,6 +26,26 @@ TABLE_COLUMNS = (
     "average_success_decision_steps",
 )
 
+RUN_TABLE_COLUMNS = (
+    "run_dir",
+    "status",
+    "run_kind",
+    "run_name",
+    "created_at_utc",
+    "git_commit",
+    "git_dirty",
+    "task_suites",
+    "episodes",
+    "horizon",
+    "max_steps",
+    "manifest_file",
+    "result_file",
+    "total_episodes",
+    "successful_episodes",
+    "failed_episodes",
+    "success_rate",
+)
+
 
 def discover_result_files(inputs: Iterable[str]) -> list[Path]:
     discovered: set[Path] = set()
@@ -77,27 +97,128 @@ def collect_result_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
     return rows
 
 
-def write_csv(rows: list[Mapping[str, Any]], path: Path) -> Path:
+def discover_run_dirs(inputs: Iterable[str]) -> list[Path]:
+    discovered: set[Path] = set()
+    for raw_input in inputs:
+        matches = glob.glob(raw_input, recursive=True)
+        candidate_paths = matches if matches else [raw_input]
+        for candidate in candidate_paths:
+            path = Path(candidate).expanduser()
+            if path.is_dir():
+                direct_manifest = _single_manifest_under(path)
+                if direct_manifest is not None:
+                    discovered.add(path)
+                else:
+                    discovered.update(manifest.parent for manifest in _manifest_files_under(path))
+            elif path.is_file() and _looks_like_manifest(path):
+                discovered.add(path.parent)
+            else:
+                raise FileNotFoundError(f"LIBERO run path not found: {raw_input}")
+    return sorted(path.resolve() for path in discovered)
+
+
+def collect_run_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
+    return [load_run_row(path) for path in paths]
+
+
+def load_run_row(run_dir: Path) -> dict[str, Any]:
+    row = _empty_run_row(run_dir)
+    manifest_path = _single_manifest_under(run_dir)
+    if manifest_path is None:
+        row["status"] = "missing_manifest"
+        return row
+    row["manifest_file"] = str(manifest_path.resolve())
+
+    try:
+        with manifest_path.open("r") as f:
+            manifest = json.load(f)
+    except json.JSONDecodeError:
+        row["status"] = "invalid_manifest"
+        return row
+    if not isinstance(manifest, Mapping):
+        row["status"] = "invalid_manifest"
+        return row
+
+    metadata = manifest.get("metadata", {})
+    git = metadata.get("git", {}) if isinstance(metadata, Mapping) else {}
+    libero = manifest.get("libero", {})
+    if not isinstance(libero, Mapping):
+        row["status"] = "invalid_manifest"
+        return row
+
+    row.update(
+        {
+            "status": "manifest_only",
+            "run_kind": str(manifest.get("run_kind", "")),
+            "run_name": str(libero.get("EVO1_LIBERO_CKPT_NAME", "")),
+            "created_at_utc": metadata.get("created_at_utc", "") if isinstance(metadata, Mapping) else "",
+            "git_commit": git.get("commit", "") if isinstance(git, Mapping) else "",
+            "git_dirty": git.get("is_dirty", "") if isinstance(git, Mapping) else "",
+            "task_suites": str(libero.get("EVO1_LIBERO_TASK_SUITES", "")),
+            "episodes": str(libero.get("EVO1_LIBERO_EPISODES", "")),
+            "horizon": str(libero.get("EVO1_LIBERO_HORIZON", "")),
+            "max_steps": str(libero.get("EVO1_LIBERO_MAX_STEPS", "")),
+        }
+    )
+
+    result_value = libero.get("EVO1_LIBERO_RESULT_FILE")
+    if not result_value:
+        row["status"] = "missing_result_path"
+        return row
+    result_path = _resolve_artifact_path(run_dir, str(result_value))
+    row["result_file"] = str(result_path)
+    if not result_path.exists():
+        row["status"] = "missing_result"
+        return row
+
+    try:
+        with result_path.open("r") as f:
+            result_payload = json.load(f)
+    except json.JSONDecodeError:
+        row["status"] = "invalid_result"
+        return row
+    if not isinstance(result_payload, Mapping):
+        row["status"] = "invalid_result"
+        return row
+
+    summary = result_payload.get("summary")
+    if not isinstance(summary, Mapping):
+        row["status"] = "invalid_result"
+        return row
+
+    row.update(
+        {
+            "status": "complete",
+            "total_episodes": int(summary.get("total_episodes", 0)),
+            "successful_episodes": int(summary.get("successful_episodes", 0)),
+            "failed_episodes": int(summary.get("failed_episodes", 0)),
+            "success_rate": _float(summary.get("success_rate", 0.0)),
+        }
+    )
+    return row
+
+
+def write_csv(rows: list[Mapping[str, Any]], path: Path, columns: tuple[str, ...] = TABLE_COLUMNS) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=TABLE_COLUMNS)
+        writer = csv.DictWriter(f, fieldnames=columns)
         writer.writeheader()
         for row in rows:
-            writer.writerow({column: row.get(column, "") for column in TABLE_COLUMNS})
+            writer.writerow({column: row.get(column, "") for column in columns})
     return path
 
 
-def write_markdown(rows: list[Mapping[str, Any]], path: Path) -> Path:
+def write_markdown(rows: list[Mapping[str, Any]], path: Path, columns: tuple[str, ...] = TABLE_COLUMNS) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(format_markdown_table(rows))
+    path.write_text(format_markdown_table(rows, columns=columns))
     return path
 
 
-def format_markdown_table(rows: list[Mapping[str, Any]]) -> str:
-    header = "| " + " | ".join(TABLE_COLUMNS) + " |"
-    separator = "| " + " | ".join(["---"] * len(TABLE_COLUMNS)) + " |"
+def format_markdown_table(rows: list[Mapping[str, Any]], columns: tuple[str, ...] = TABLE_COLUMNS) -> str:
+    header = "| " + " | ".join(columns) + " |"
+    separator = "| " + " | ".join(["---"] * len(columns)) + " |"
     body = [
-        "| " + " | ".join(_markdown_cell(row.get(column, "")) for column in TABLE_COLUMNS) + " |"
+        "| " + " | ".join(_markdown_cell(row.get(column, "")) for column in columns) + " |"
         for row in rows
     ]
     return "\n".join([header, separator] + body) + "\n"
@@ -116,6 +237,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="markdown",
         help="Output table format.",
     )
+    parser.add_argument(
+        "--table",
+        choices=("results", "runs"),
+        default="results",
+        help="Summarize result JSON rows or LIBERO run-directory inventory rows.",
+    )
     parser.add_argument("--output", help="Optional output path. Defaults to stdout.")
     return parser.parse_args(argv)
 
@@ -123,8 +250,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        paths = discover_result_files(args.inputs)
-        rows = collect_result_rows(paths)
+        if args.table == "runs":
+            paths = discover_run_dirs(args.inputs)
+            rows = collect_run_rows(paths)
+            columns = RUN_TABLE_COLUMNS
+            source_label = "run dir(s)"
+        else:
+            paths = discover_result_files(args.inputs)
+            rows = collect_result_rows(paths)
+            columns = TABLE_COLUMNS
+            source_label = "result file(s)"
     except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
@@ -132,18 +267,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.output:
         output_path = Path(args.output).expanduser()
         if args.format == "csv":
-            write_csv(rows, output_path)
+            write_csv(rows, output_path, columns=columns)
         else:
-            write_markdown(rows, output_path)
-        print(f"Wrote {len(rows)} row(s) from {len(paths)} result file(s) to {output_path}")
+            write_markdown(rows, output_path, columns=columns)
+        print(f"Wrote {len(rows)} row(s) from {len(paths)} {source_label} to {output_path}")
     else:
         if args.format == "csv":
-            writer = csv.DictWriter(_StdoutWriter(), fieldnames=TABLE_COLUMNS)
+            writer = csv.DictWriter(_StdoutWriter(), fieldnames=columns)
             writer.writeheader()
             for row in rows:
-                writer.writerow({column: row.get(column, "") for column in TABLE_COLUMNS})
+                writer.writerow({column: row.get(column, "") for column in columns})
         else:
-            print(format_markdown_table(rows), end="")
+            print(format_markdown_table(rows, columns=columns), end="")
 
     return 0
 
@@ -180,6 +315,42 @@ def _run_name(path: Path, config: Any) -> str:
             if value:
                 return str(value)
     return path.stem.replace("_results", "")
+
+
+def _empty_run_row(run_dir: Path) -> dict[str, Any]:
+    return {column: "" for column in RUN_TABLE_COLUMNS} | {
+        "run_dir": str(run_dir.resolve()),
+        "status": "unknown",
+    }
+
+
+def _manifest_files_under(path: Path) -> list[Path]:
+    manifests = set(path.rglob("run_manifest.json"))
+    manifests.update(path.rglob("*_run_manifest.json"))
+    return sorted(manifests)
+
+
+def _single_manifest_under(path: Path) -> Path | None:
+    manifests = []
+    direct_manifest = path / "run_manifest.json"
+    if direct_manifest.is_file():
+        manifests.append(direct_manifest)
+    manifests.extend(sorted(path.glob("*_run_manifest.json")))
+    unique_manifests = sorted({manifest.resolve() for manifest in manifests})
+    if len(unique_manifests) == 1:
+        return unique_manifests[0]
+    return None
+
+
+def _looks_like_manifest(path: Path) -> bool:
+    return path.name == "run_manifest.json" or path.name.endswith("_run_manifest.json")
+
+
+def _resolve_artifact_path(run_dir: Path, value: str) -> Path:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = run_dir / path
+    return path.resolve()
 
 
 def _float(value: Any) -> float:

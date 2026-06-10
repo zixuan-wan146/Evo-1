@@ -234,6 +234,17 @@ python scripts/summarize_libero_results.py LIBERO_evaluation/log_file/*_results.
 The comparison table includes the run name, Git commit, dirty state, overall metrics, and per-suite
 metrics when present in the result JSON.
 
+To inventory grouped run directories, including interrupted runs that only have a manifest:
+
+```bash
+python scripts/summarize_libero_results.py /root/autodl-tmp/evo1_runs \
+  --table runs \
+  --output outputs/libero_run_inventory.md
+```
+
+The run inventory table reports each run directory, completeness status, manifest settings, result
+path, Git metadata, and overall success metrics when a result JSON exists.
+
 For headless smoke tests, `EVO1_MUJOCO_GL=osmesa` is the more stable default. Use
 `EVO1_MUJOCO_GL=egl` on GPU servers when EGL cleanup warnings are acceptable and
 faster rendering is preferred.
