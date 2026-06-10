@@ -590,7 +590,7 @@ def train(config):
          
     # === Save final model ===
     save_checkpoint(save_dir, step="final", model_engine=model_engine, loss=loss, accelerator=accelerator, config=config, norm_stats=dataset.arm2stats_dict)
-    logging.info(f"Final model saved to step_final/")
+    logging.info("Final model saved to step_final/")
     logging.info(f"Best checkpoint saved to step_best/ with loss {best_loss:.6f}")
 
 

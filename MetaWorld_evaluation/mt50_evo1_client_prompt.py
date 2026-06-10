@@ -1,17 +1,15 @@
 # mt50_evo1_client.py
 import asyncio
+import datetime
 import json
 import os
-from typing import List, Optional, Dict, Set
+from typing import Dict, List, Optional
 
 import cv2
 import gymnasium as gym
 import metaworld  # noqa: F401
 import numpy as np
 import websockets
-import random
-
-import datetime
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -308,7 +306,7 @@ def load_order_and_groups(total_envs: int):
         groups = {k: set(v) for k, v in data["groups"].items()}
         idx_to_slug = {int(k): v for k, v in data["idx_to_slug"].items()}
         print(f"[INFO] Loaded order from {ORDER_JSON_PATH} (len={len(ordered_indices)})")
-        log_write(f"[INFO] Metaworld Evaluation Begins ...")
+        log_write("[INFO] Metaworld Evaluation Begins ...")
         return ordered_indices, groups, idx_to_slug
 
   
@@ -379,8 +377,10 @@ async def eval_mt50_with_groups(server_url: str,
                 for obj in (sub, getattr(sub, "unwrapped", None)):
                     fn = getattr(obj, "iterate_goal_position", None)
                     if callable(fn):
-                        try: fn()
-                        except Exception: pass
+                        try:
+                            fn()
+                        except Exception:
+                            pass
                         break
 
                 inspect_choice = INSPECT_SAMPLE_PER_EPISODE
