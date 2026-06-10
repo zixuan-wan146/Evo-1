@@ -1,6 +1,10 @@
 # Evo-1 Simulation Workspace
 
-This repository has been trimmed to the simulation workflow for Evo-1:
+This repository is maintained as a LIBERO-first simulation workspace for Evo-1 reproduction and
+follow-up improvements. The active engineering workflow, run profiles, artifact checks, and reports
+target LIBERO.
+
+The repository still includes legacy simulation entry points:
 
 - MetaWorld evaluation
 - LIBERO evaluation
@@ -21,8 +25,10 @@ Evo_1/
     train.py                Training entry point
   utils/                    Shared helpers
 
-MetaWorld_evaluation/       MetaWorld simulation evaluation client
 LIBERO_evaluation/          LIBERO simulation evaluation client
+MetaWorld_evaluation/       Legacy MetaWorld simulation evaluation client
+configs/libero_profiles/    Reusable LIBERO smoke/full-eval profiles
+scripts/                    Repository checks and LIBERO run tooling
 deepspeed_setup_example.txt Accelerate/DeepSpeed setup reference
 ```
 
@@ -230,6 +236,25 @@ python scripts/plan_libero_run.py \
 
 The plan file includes the server command, LIBERO client command, artifact validation command, and
 report command with the same paths and profile.
+
+For a tracked baseline or candidate improvement, initialize an experiment directory before running:
+
+```bash
+python scripts/init_libero_experiment.py \
+  --name baseline_full_eval_001 \
+  --root /root/autodl-tmp/evo1_experiments \
+  --kind eval \
+  --checkpoint /root/autodl-tmp/checkpoints/Evo1_LIBERO \
+  --profile configs/libero_profiles/full_eval.env \
+  --server-python /root/autodl-tmp/miniforge3/envs/Evo1/bin/python \
+  --libero-python /root/autodl-tmp/envs/libero/bin/python \
+  --min-total-episodes 10
+```
+
+The experiment directory contains a profile snapshot, `run_plan.md`, `notes.md`,
+`experiment_manifest.json`, a planned `run/` directory for LIBERO artifacts, and a planned `report/`
+directory for summaries and metric gates. The script refuses to write into a non-empty experiment
+directory, so old results are not silently overwritten.
 
 The LIBERO client stores logs, videos, and a machine-readable result summary under
 `LIBERO_evaluation/`.

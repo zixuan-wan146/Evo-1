@@ -65,16 +65,13 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def build_plan(args: argparse.Namespace) -> LiberoRunPlan:
-    run_dir = _resolve_path(args.run_dir)
-    output = _resolve_path(args.output) if args.output else run_dir / "run_plan.md"
-    report_dir = _resolve_path(args.report_dir) if args.report_dir else run_dir / "report"
-    return LiberoRunPlan(
+    return build_plan_from_values(
         kind=args.kind,
-        run_dir=run_dir,
-        checkpoint=_resolve_path(args.checkpoint),
-        profile=_resolve_path(args.profile),
-        output=output,
-        report_dir=report_dir,
+        run_dir=args.run_dir,
+        checkpoint=args.checkpoint,
+        profile=args.profile,
+        output=args.output,
+        report_dir=args.report_dir,
         server_python=args.server_python,
         libero_python=args.libero_python,
         host=args.host,
@@ -83,8 +80,50 @@ def build_plan(args: argparse.Namespace) -> LiberoRunPlan:
         inference_steps=args.inference_steps,
         min_success_rate=args.min_success_rate,
         min_total_episodes=args.min_total_episodes,
-        baseline=tuple(args.baseline),
+        baseline=args.baseline,
         max_regression=args.max_regression,
+    )
+
+
+def build_plan_from_values(
+    *,
+    kind: str,
+    run_dir: str | Path,
+    checkpoint: str | Path,
+    profile: str | Path,
+    output: str | Path | None = None,
+    report_dir: str | Path | None = None,
+    server_python: str = "python",
+    libero_python: str = "python",
+    host: str = "127.0.0.1",
+    port: int = 9000,
+    device: str = "cuda:0",
+    inference_steps: int = 1,
+    min_success_rate: float | None = None,
+    min_total_episodes: int | None = None,
+    baseline: Sequence[str] = (),
+    max_regression: float = 0.0,
+) -> LiberoRunPlan:
+    run_dir = _resolve_path(run_dir)
+    output_path = _resolve_path(output) if output else run_dir / "run_plan.md"
+    report_dir_path = _resolve_path(report_dir) if report_dir else run_dir / "report"
+    return LiberoRunPlan(
+        kind=kind,
+        run_dir=run_dir,
+        checkpoint=_resolve_path(checkpoint),
+        profile=_resolve_path(profile),
+        output=output_path,
+        report_dir=report_dir_path,
+        server_python=server_python,
+        libero_python=libero_python,
+        host=host,
+        port=port,
+        device=device,
+        inference_steps=inference_steps,
+        min_success_rate=min_success_rate,
+        min_total_episodes=min_total_episodes,
+        baseline=tuple(baseline),
+        max_regression=max_regression,
     )
 
 

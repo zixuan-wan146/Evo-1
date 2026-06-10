@@ -86,6 +86,15 @@ run_step \
   "LIBERO eval profile dry-run" \
   env EVO1_LIBERO_DRY_RUN=1 EVO1_LIBERO_PROFILE=configs/libero_profiles/full_eval.env \
   "$script_dir/run_libero_eval.sh"
+run_step \
+  "LIBERO experiment init dry-run" \
+  "$python_bin" "$script_dir/init_libero_experiment.py" \
+  --dry-run \
+  --name check_repo_smoke \
+  --root /tmp/evo1_check_experiments \
+  --checkpoint /tmp/Evo1_LIBERO \
+  --profile configs/libero_profiles/smoke.env \
+  --kind smoke
 
 if [ "${EVO1_CHECK_SKIP_COMPILE:-0}" = "1" ]; then
   log "Skipping compileall because EVO1_CHECK_SKIP_COMPILE=1"

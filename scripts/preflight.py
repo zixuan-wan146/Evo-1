@@ -57,6 +57,7 @@ REQUIRED_REPO_FILES = (
     "scripts/check_libero_metrics.py",
     "scripts/report_libero_runs.py",
     "scripts/plan_libero_run.py",
+    "scripts/init_libero_experiment.py",
     "configs/libero_profiles/smoke.env",
     "configs/libero_profiles/full_eval.env",
 )
