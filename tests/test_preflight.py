@@ -199,6 +199,34 @@ def test_libero_result_validation_rejects_summary_episode_count_mismatch(tmp_pat
     assert "does not match episodes length" in report.results[-1].message
 
 
+def test_libero_result_validation_rejects_summary_metric_mismatch(tmp_path):
+    preflight = load_preflight_module()
+    payload = valid_libero_result_payload()
+    payload["summary"]["success_rate"] = 1.0
+    result_file = tmp_path / "smoke_results.json"
+    result_file.write_text(json.dumps(payload))
+
+    report = preflight.Report()
+    preflight.check_libero_result_file(result_file, report)
+
+    assert report.has_failures
+    assert "summary.success_rate" in report.results[-1].message
+
+
+def test_libero_result_validation_rejects_suite_keys_mismatch(tmp_path):
+    preflight = load_preflight_module()
+    payload = valid_libero_result_payload()
+    payload["summary"]["suites"] = {}
+    result_file = tmp_path / "smoke_results.json"
+    result_file.write_text(json.dumps(payload))
+
+    report = preflight.Report()
+    preflight.check_libero_result_file(result_file, report)
+
+    assert report.has_failures
+    assert "summary.suites keys" in report.results[-1].message
+
+
 def test_run_preflight_accepts_libero_result_directory(tmp_path):
     preflight = load_preflight_module()
     repo_root = Path(__file__).resolve().parents[1]

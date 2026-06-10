@@ -479,6 +479,30 @@ def check_libero_result_file(result_path: Path, report: Report) -> None:
             f"{result_path} summary total_episodes={summary_total} does not match episodes length={len(episodes)}",
         )
         return
+    consistency_error = _validate_libero_summary_matches_episodes(summary, episodes, "summary")
+    if consistency_error:
+        report.fail("libero-result", f"{result_path}: {consistency_error}")
+        return
+
+    episode_suite_names = {episode["task_suite"] for episode in episodes}
+    summary_suite_names = set((suites or {}).keys())
+    if episode_suite_names != summary_suite_names:
+        report.fail(
+            "libero-result",
+            f"{result_path} summary.suites keys {sorted(summary_suite_names)} "
+            f"do not match episode task suites {sorted(episode_suite_names)}",
+        )
+        return
+    for suite_name in sorted(episode_suite_names):
+        suite_episodes = [episode for episode in episodes if episode["task_suite"] == suite_name]
+        suite_consistency_error = _validate_libero_summary_matches_episodes(
+            suites[suite_name],
+            suite_episodes,
+            f"summary.suites.{suite_name}",
+        )
+        if suite_consistency_error:
+            report.fail("libero-result", f"{result_path}: {suite_consistency_error}")
+            return
 
     report.ok("libero-result", f"{result_path} describes {len(episodes)} episode(s)")
 
@@ -529,6 +553,45 @@ def _validate_libero_episode(episode: Any, index: int) -> str | None:
     if not episode["success"] and not str(episode.get("failure_reason", "")).strip():
         return f"episodes[{index}].failure_reason is required for failed episodes"
     return None
+
+
+def _validate_libero_summary_matches_episodes(
+    summary: dict[str, Any],
+    episodes: list[dict[str, Any]],
+    label: str,
+) -> str | None:
+    expected = _compute_episode_summary(episodes)
+    for field in LIBERO_SUMMARY_COUNT_FIELDS:
+        if int(summary[field]) != expected[field]:
+            return f"{label}.{field}={summary[field]} does not match episode-derived value {expected[field]}"
+    for field in LIBERO_SUMMARY_FLOAT_FIELDS:
+        if not math.isclose(float(summary[field]), expected[field], rel_tol=1e-9, abs_tol=1e-9):
+            return f"{label}.{field}={summary[field]} does not match episode-derived value {expected[field]}"
+    return None
+
+
+def _compute_episode_summary(episodes: list[dict[str, Any]]) -> dict[str, Any]:
+    total = len(episodes)
+    successful = sum(1 for episode in episodes if episode["success"])
+    failed = total - successful
+    decision_steps = [int(episode["decision_steps"]) for episode in episodes]
+    control_steps = [int(episode["control_steps"]) for episode in episodes]
+    success_decision_steps = [
+        int(episode["decision_steps"]) for episode in episodes if episode["success"]
+    ]
+    return {
+        "total_episodes": total,
+        "successful_episodes": successful,
+        "failed_episodes": failed,
+        "success_rate": successful / total if total else 0.0,
+        "average_decision_steps": _mean(decision_steps),
+        "average_control_steps": _mean(control_steps),
+        "average_success_decision_steps": _mean(success_decision_steps),
+    }
+
+
+def _mean(values: list[int]) -> float:
+    return float(sum(values) / len(values)) if values else 0.0
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

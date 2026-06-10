@@ -201,6 +201,9 @@ python scripts/preflight.py \
   --libero-result "LIBERO_evaluation/log_file/*_results.json"
 ```
 
+The result check verifies both schema and consistency between overall/per-suite summaries and the
+episode records.
+
 For a strict training-data check, add `--strict-data` after downloading the dataset.
 
 ## Training

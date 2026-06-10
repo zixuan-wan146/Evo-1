@@ -46,6 +46,7 @@
 - `Validate LIBERO result artifacts`（本轮新增，preflight 可检查 LIBERO result JSON 结构）
 - `Validate checkpoint metadata`（本轮新增，preflight 可检查 checkpoint config/norm_stats 结构）
 - `Preflight checkpoint before server start`（本轮新增，启动 Evo-1 server 前自动运行 checkpoint preflight）
+- `Check LIBERO result consistency`（本轮新增，preflight 会校验 summary 与 episode 明细一致）
 
 服务器对应提交：
 
@@ -178,6 +179,7 @@
 - 新增 LIBERO 多次运行结果汇总为 Markdown/CSV 的说明。
 - 新增 LIBERO result JSON 中运行元数据和汇总表 git 列的说明。
 - 新增用 `scripts/preflight.py --libero-result` 校验评估结果文件的说明。
+- 新增 LIBERO result 校验会比较 overall/per-suite summary 与 episode 明细一致性的说明。
 - 新增 checkpoint preflight 会检查 `config.json` 关键维度和 `norm_stats.json` min/max 结构的说明。
 - 新增 `scripts/start_evo1_server.sh` 默认先跑 checkpoint preflight、可用 `EVO1_SKIP_PREFLIGHT=1` 跳过的说明。
 - 记录 `HF_HOME`、`HUGGINGFACE_HUB_CACHE`、`PIP_CACHE_DIR`、`TMPDIR` 等数据盘路径建议。
@@ -190,7 +192,7 @@
   - 可选检查 checkpoint 目录：`--checkpoint /path/to/Evo1_LIBERO`，包括必备文件、`config.json` 维度和 `norm_stats.json` 结构。
   - 可选检查运行时依赖：`--check-imports evo1|libero|all`。
   - 可选严格检查数据文件：`--strict-data`。
-  - 可选检查 LIBERO result JSON 文件、目录或 glob：`--libero-result path_or_glob`。
+  - 可选检查 LIBERO result JSON 文件、目录或 glob：`--libero-result path_or_glob`，包括 schema 和 summary/episode 一致性。
 - 新增 `scripts/setup_libero_env.sh`
   - 创建/复用 LIBERO Python 3.8.13 conda prefix env。
   - 安装 `libero==0.1.1`、`websockets`、`imageio`。
@@ -277,7 +279,7 @@ git diff --check
 
 本地结果：
 
-- `pytest`：61 passed, 3 skipped
+- `pytest`：63 passed, 3 skipped
 - `scripts/preflight.py`：通过；仅提示默认训练数据路径不存在的 WARN（本地未放完整训练数据，非失败）
 - `bash -n scripts/*.sh`：通过
 - `compileall`：通过
