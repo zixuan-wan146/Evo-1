@@ -20,5 +20,7 @@ jobs:
         run: python -m pytest
       - name: Run lint
         run: python -m ruff check .
+      - name: Check shell scripts
+        run: find scripts -name "*.sh" -print0 | xargs -0 bash -n
       - name: Compile Python sources
         run: python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation

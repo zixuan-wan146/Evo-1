@@ -6,6 +6,7 @@ wandb/
 **/.ipynb_checkpoints/
 pretraining_data_cache/
 training_data_cache/
+.evo1-data/
 logs/
 checkpoints/
 Evo1_training_dataset/

@@ -130,6 +130,23 @@
 - 记录 `HF_HOME`、`HUGGINGFACE_HUB_CACHE`、`PIP_CACHE_DIR`、`TMPDIR` 等数据盘路径建议。
 - 记录 `flash-attn` cross-device link 安装问题的处理方式。
 
+### 复现脚本
+
+- 新增 `scripts/setup_libero_env.sh`
+  - 创建/复用 LIBERO Python 3.8.13 conda prefix env。
+  - 安装 `libero==0.1.1`、`websockets`、`imageio`。
+  - 下载 LIBERO assets 到数据盘。
+  - 写入 `~/.libero/config.yaml`。
+  - 将包内 `assets` 软链接到数据盘 assets 目录。
+  - root + apt 环境下自动安装 `libegl1`、`libosmesa6`、`libglu1-mesa`。
+- 新增 `scripts/start_evo1_server.sh`
+  - 用环境变量或参数启动 Evo1 websocket server。
+  - 支持 `EVO1_PYTHON`、`EVO1_CKPT_DIR`、`EVO1_HOST`、`EVO1_PORT`、`EVO1_DEVICE`、`EVO1_INFERENCE_STEPS`。
+- 新增 `scripts/run_libero_smoke.sh`
+  - 固化 1 task / 1 episode / 1 step 的 LIBERO smoke 默认配置。
+  - 支持通过环境变量扩展到更长 eval。
+- CI 新增 shell 脚本语法检查：`find scripts -name "*.sh" -print0 | xargs -0 bash -n`。
+
 ## 服务器部署状态
 
 服务器硬件：
@@ -247,4 +264,4 @@ python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation tests
 2. 需要评估效果时，在服务器跑完整 LIBERO eval，例如逐个 suite 设置合理 `EVO1_LIBERO_MAX_STEPS` 和 `EVO1_LIBERO_HORIZON=14`。
 3. 下载小规模训练数据或抽样数据，跑 `max_steps=1` 到 `10` 的训练 smoke test。
 4. 根据真实 eval/training 结果继续修复工程问题。
-5. 将 LIBERO 环境安装步骤固化为脚本，减少以后手工配置系统库、assets 和 `~/.libero/config.yaml` 的成本。
+5. 在下一次服务器可用时，用新脚本从空环境重跑一次 LIBERO 安装和 smoke，确认脚本级端到端复现。

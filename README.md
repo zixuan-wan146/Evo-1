@@ -46,6 +46,7 @@ Install the lightweight development dependencies from the repository root:
 ```bash
 pip install -r requirements-dev.txt
 python -m pytest
+find scripts -name "*.sh" -print0 | xargs -0 bash -n
 python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation tests
 ```
 
@@ -99,20 +100,17 @@ python mt50_evo1_client_prompt.py
 
 ## LIBERO Evaluation
 
-Create a separate environment for LIBERO:
+Recommended setup for a server with a data disk:
 
 ```bash
-conda create -n libero python=3.8.13 -y
-conda activate libero
-
-cd LIBERO_evaluation
-git clone https://github.com/Lifelong-Robot-Learning/LIBERO.git
-cd LIBERO
-pip install -r requirements.txt
-pip install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio==0.11.0 --extra-index-url https://download.pytorch.org/whl/cu113
-pip install -e .
-pip install websockets huggingface_hub
+EVO1_DATA_ROOT=/root/autodl-tmp \
+CONDA_BIN=/root/miniconda3/bin/conda \
+scripts/setup_libero_env.sh
 ```
+
+The setup script creates a Python 3.8.13 LIBERO environment, installs `libero==0.1.1`,
+downloads LIBERO assets, configures `~/.libero/config.yaml`, and installs the headless
+MuJoCo system libraries when run as root on Ubuntu.
 
 Download the checkpoint:
 
@@ -123,17 +121,15 @@ hf download MINT-SJTU/Evo1_LIBERO --local-dir /path/to/checkpoint
 Start the Evo-1 server:
 
 ```bash
-conda activate Evo1
-cd Evo_1
-python scripts/Evo1_server.py --ckpt_dir /path/to/checkpoint --port 9000
+EVO1_PYTHON=/root/autodl-tmp/miniforge3/envs/Evo1/bin/python \
+scripts/start_evo1_server.sh /path/to/checkpoint
 ```
 
-Run the LIBERO client:
+Run the minimal LIBERO smoke client from another shell:
 
 ```bash
-conda activate libero
-cd LIBERO_evaluation
-python libero_client_4tasks.py
+LIBERO_PYTHON=/root/autodl-tmp/envs/libero/bin/python \
+scripts/run_libero_smoke.sh
 ```
 
 The LIBERO client stores logs and videos under `LIBERO_evaluation/`.
@@ -147,7 +143,7 @@ export EVO1_LIBERO_EPISODES=1
 export EVO1_LIBERO_TASK_SUITES=libero_spatial
 export EVO1_LIBERO_TASK_LIMIT=1
 export EVO1_LIBERO_MAX_STEPS=25
-python libero_client_4tasks.py
+LIBERO_PYTHON=/root/autodl-tmp/envs/libero/bin/python scripts/run_libero_smoke.sh
 ```
 
 For headless smoke tests, `EVO1_MUJOCO_GL=osmesa` is the more stable default. Use
