@@ -187,6 +187,19 @@ The manifest is written before the client starts, so failed or interrupted runs 
 resolved LIBERO settings, output paths, Git commit, dirty state, command, Python version, and
 selected non-secret environment variables.
 
+Reusable LIBERO settings can be stored in a profile:
+
+```bash
+EVO1_LIBERO_PROFILE=configs/libero_profiles/smoke.env \
+EVO1_LIBERO_RUN_DIR=/root/autodl-tmp/evo1_runs/libero_smoke_001 \
+LIBERO_PYTHON=/root/autodl-tmp/envs/libero/bin/python \
+scripts/run_libero_smoke.sh
+```
+
+Profile files use plain `KEY=VALUE` lines and are parsed without executing shell code. Only
+LIBERO-related allowlisted keys are accepted, and explicit environment variables still override
+profile values.
+
 Run the full default LIBERO evaluation when you are ready to collect comparable numbers:
 
 ```bash
@@ -198,6 +211,8 @@ scripts/run_libero_eval.sh
 `EVO1_LIBERO_EPISODES=10`, and max steps `25,25,25,95`. Set `EVO1_LIBERO_DRY_RUN=1` to print the
 resolved eval environment without running the client.
 Set `EVO1_LIBERO_RUN_DIR=/path/to/run` to use the same grouped output layout as smoke runs.
+Use `EVO1_LIBERO_PROFILE=configs/libero_profiles/full_eval.env` to make the full-eval settings
+explicit in command logs.
 
 The LIBERO client stores logs, videos, and a machine-readable result summary under
 `LIBERO_evaluation/`.

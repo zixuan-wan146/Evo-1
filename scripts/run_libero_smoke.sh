@@ -4,6 +4,9 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 
+source "$script_dir/libero_profile.sh"
+load_libero_profile "$repo_root"
+
 python_bin="${LIBERO_PYTHON:-python}"
 run_dir="${EVO1_LIBERO_RUN_DIR:-}"
 

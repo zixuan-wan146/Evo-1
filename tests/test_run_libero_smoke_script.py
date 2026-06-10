@@ -63,3 +63,58 @@ def test_run_libero_smoke_script_can_group_outputs_under_run_dir(tmp_path):
         run_dir / "results" / "Evo1_libero_smoke_results.json"
     )
     assert env["EVO1_LIBERO_MANIFEST_FILE"] == str(run_dir / "run_manifest.json")
+
+
+def test_run_libero_smoke_script_loads_profile(tmp_path):
+    profile = tmp_path / "custom_smoke.env"
+    profile.write_text(
+        "\n".join(
+            [
+                "EVO1_LIBERO_EPISODES=3",
+                "EVO1_LIBERO_TASK_SUITES=libero_goal",
+                "EVO1_LIBERO_TASK_LIMIT=2",
+                "EVO1_LIBERO_MAX_STEPS=5",
+                "EVO1_LIBERO_HORIZON=2",
+                "EVO1_LIBERO_CKPT_NAME=profile_smoke",
+                "",
+            ]
+        )
+    )
+
+    result = run_smoke_script({"EVO1_LIBERO_PROFILE": str(profile)})
+
+    assert result.returncode == 0, result.stderr
+    env = parse_env_output(result.stdout)
+    assert env["EVO1_LIBERO_PROFILE"] == str(profile)
+    assert env["EVO1_LIBERO_EPISODES"] == "3"
+    assert env["EVO1_LIBERO_TASK_SUITES"] == "libero_goal"
+    assert env["EVO1_LIBERO_TASK_LIMIT"] == "2"
+    assert env["EVO1_LIBERO_MAX_STEPS"] == "5"
+    assert env["EVO1_LIBERO_HORIZON"] == "2"
+    assert env["EVO1_LIBERO_CKPT_NAME"] == "profile_smoke"
+
+
+def test_run_libero_smoke_script_keeps_explicit_env_over_profile(tmp_path):
+    profile = tmp_path / "custom_smoke.env"
+    profile.write_text("EVO1_LIBERO_EPISODES=3\n")
+
+    result = run_smoke_script(
+        {
+            "EVO1_LIBERO_PROFILE": str(profile),
+            "EVO1_LIBERO_EPISODES": "7",
+        }
+    )
+
+    assert result.returncode == 0, result.stderr
+    env = parse_env_output(result.stdout)
+    assert env["EVO1_LIBERO_EPISODES"] == "7"
+
+
+def test_run_libero_smoke_script_rejects_unsupported_profile_key(tmp_path):
+    profile = tmp_path / "bad.env"
+    profile.write_text("HF_TOKEN=secret\n")
+
+    result = run_smoke_script({"EVO1_LIBERO_PROFILE": str(profile)})
+
+    assert result.returncode != 0
+    assert "unsupported key" in result.stderr

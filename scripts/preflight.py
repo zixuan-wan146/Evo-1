@@ -44,6 +44,7 @@ REQUIRED_REPO_FILES = (
     "scripts/preflight.py",
     "scripts/audit_requirements.py",
     "scripts/check_repo.sh",
+    "scripts/libero_profile.sh",
     "scripts/download_libero_checkpoint.sh",
     "scripts/validate_training_dataset.py",
     "scripts/setup_libero_env.sh",
@@ -55,6 +56,8 @@ REQUIRED_REPO_FILES = (
     "scripts/summarize_libero_results.py",
     "scripts/check_libero_metrics.py",
     "scripts/report_libero_runs.py",
+    "configs/libero_profiles/smoke.env",
+    "configs/libero_profiles/full_eval.env",
 )
 
 REQUIRED_CHECKPOINT_FILES = (

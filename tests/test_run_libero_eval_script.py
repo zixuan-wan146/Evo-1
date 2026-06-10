@@ -82,3 +82,14 @@ def test_run_libero_eval_script_can_group_outputs_under_run_dir(tmp_path):
         run_dir / "results" / "Evo1_libero_eval_results.json"
     )
     assert env["EVO1_LIBERO_MANIFEST_FILE"] == str(run_dir / "run_manifest.json")
+
+
+def test_run_libero_eval_script_loads_repo_relative_profile():
+    result = run_eval_script({"EVO1_LIBERO_PROFILE": "configs/libero_profiles/smoke.env"})
+
+    assert result.returncode == 0, result.stderr
+    env = parse_env_output(result.stdout)
+    assert env["EVO1_LIBERO_PROFILE"] == str(REPO_ROOT / "configs" / "libero_profiles" / "smoke.env")
+    assert env["EVO1_LIBERO_EPISODES"] == "1"
+    assert env["EVO1_LIBERO_TASK_SUITES"] == "libero_spatial"
+    assert env["EVO1_LIBERO_CKPT_NAME"] == "Evo1_libero_smoke"
