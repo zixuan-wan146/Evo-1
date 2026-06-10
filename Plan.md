@@ -4,119 +4,213 @@
 
 ## 当前状态
 
-- 实际 Git 仓库位于 `/home/myser/Project/Evo/Evo-1`。
-- 外层 `/home/myser/Project/Evo` 不是有效 Git 仓库，里面的 `.git` 是空目录。
-- 当前工作区已有未提交改动，工程改造已按用户要求暂停。
-- 本地环境目前没有安装 `torch`，因此尚不能做完整训练、推理、模型加载或 GPU 验证。
+- 本地仓库：`/home/myser/Project/Evo/Evo-1`
+- 服务器仓库：`Evo:/root/autodl-tmp/Evo-1`
+- 外层目录 `/home/myser/Project/Evo` 不是有效 Git 仓库，里面的 `.git` 是空目录。
+- 本地已创建 SSH host：
+  - `Host Evo`
+  - `HostName connect.bjb2.seetacloud.com`
+  - `Port 53983`
+  - `User root`
+  - `IdentityFile /home/myser/.ssh/id_ed25519_autodl`
+- GitHub 推送状态：
+  - 本地提交已完成。
+  - `git push origin main` 失败，原因是当前凭据 `myserendipity137` 没有 `zixuan-wan146/Evo-1.git` 写权限。
+  - 需要给该账号写权限，或提供有权限的新 remote。
 
-## 已完成的改动
+## 已完成提交
 
-### 工程配置与轻量测试骨架
+本地提交：
+
+- `fb2ffad Improve engineering baseline for Evo-1`
+- `c97cfa8 Document remote setup and checkpoint loading`
+- `a2888f2 Add practical lint gate`
+
+服务器对应提交：
+
+- `8e7edc8 Improve engineering baseline for Evo-1`
+- `3fb5b49 Document remote setup and checkpoint loading`
+- `ee64c12 Add practical lint gate`
+
+服务器提交哈希不同是因为通过 `git format-patch | git am` 应用，内容等价但提交对象不同。
+
+## 已完成的工程改造
+
+### 工程配置与 CI
 
 - 新增 `pyproject.toml`
-  - 配置 `pytest` 的测试路径和 `pythonpath`。
-  - 配置 `ruff` 的基础 lint 规则。
+  - 配置 `pytest`。
+  - 配置第一阶段实用 `ruff` 门禁：`E`/`F`，忽略长行。
 - 新增 `requirements-dev.txt`
-  - 包含轻量开发依赖：`numpy`、`pytest`、`ruff`。
+  - `numpy`
+  - `pytest`
+  - `ruff`
 - 新增 `.github/workflows/ci.yml`
-  - GitHub Actions 轻量 CI。
-  - 安装开发依赖。
-  - 运行单元测试。
-  - 运行 Python 源码编译检查。
-- 新增 `Evo_1/__init__.py`
-  - 让 `Evo_1` 成为明确的 Python package。
-- 新增 `tests/test_runtime_config.py`
-  - 覆盖 `pad_1d`、`build_action_mask`、`normalize_mask` 的基础行为。
-- 新增 `tests/test_flow_matching_config.py`
-  - 覆盖 `FlowmatchingActionHead` 无 `config` 构造路径。
-  - 如果本地没有 `torch`，该测试会自动跳过。
+  - 安装轻量开发依赖。
+  - 运行 `pytest`。
+  - 运行 `ruff check .`。
+  - 运行 `compileall`。
+- 新增 `Evo_1/__init__.py`。
+- 新增基础测试：
+  - `tests/test_runtime_config.py`
+  - `tests/test_flow_matching_config.py`
 
-### 已修复的代码问题
+### 代码稳健性修复
 
 - `Evo_1/model/action_head/flow_matching.py`
-  - 修复 `FlowmatchingActionHead(config=None, ...)` 时访问 `config.per_action_dim` 和 `config.action_dim` 导致失败的问题。
-  - 将 `per_action_dim` 写入默认 `SimpleNamespace`。
-  - 增加 `action_dim == horizon * per_action_dim` 的显式校验。
+  - 修复 `FlowmatchingActionHead(config=None, ...)` 构造路径。
+  - 显式校验 `action_dim == horizon * per_action_dim`。
 
 - `Evo_1/scripts/train.py`
-  - 在创建 dataloader 前检查 dataset 是否为空。
-  - 在 `drop_last=True` 导致 dataloader 没有 batch 时显式报错。
-  - 训练 forward 时传入 `embodiment_ids`，避免多 embodiment 配置下该信息被静默丢弃。
-  - 将 `assert pred_velocity.shape == target_velocity.shape` 改成显式 `ValueError`。
+  - 增加训练配置校验。
+  - 检查空 dataset 和空 dataloader。
+  - 训练 forward 时传入 `embodiment_ids`。
+  - 将 shape `assert` 改为显式 `ValueError`。
+  - autocast 根据设备选择，非 CUDA 不强制 CUDA autocast。
+  - checkpoint 保存/恢复处显式要求 DeepSpeed checkpoint support。
+  - 非有限数值检测改为显式 `FloatingPointError`。
 
 - `Evo_1/scripts/Evo1_server.py`
-  - 将请求 shape 校验从 `assert` 改成运行时 `ValueError`。
-  - 修复 `with torch.no_grad() and torch.amp.autocast(...)` 的上下文管理写法，改为 `with torch.no_grad(), autocast_context:`。
-  - CPU 设备下不再强行启用 CUDA autocast。
+  - 增加设备可用性校验。
+  - 请求字段和 shape 校验从 `assert` 改为运行时错误。
+  - 修复 `torch.no_grad()` 与 autocast 上下文写法。
+  - 单请求失败时通过 websocket 返回 JSON error。
+  - `torch.load(..., weights_only=False)` 显式声明 DeepSpeed checkpoint 可信加载假设。
 
 - `Evo_1/dataset/simulation_dataset.py`
-  - 将样本读取失败时的无限递归式重试改为有限重试。
-  - 新增 `max_sample_retries = 10`。
-  - 抽出 `_load_sample()`，读取 cache 和视频失败后由 `__getitem__()` 统一处理。
+  - 样本失败读取从无限递归改为有限重试。
+  - 空 dataset 显式报错。
+  - `_pad_tensor()` 显式拒绝超过 `max_dim` 的张量。
 
-## 尚未完成但计划继续做的事情
-
-### 评估脚本参数化
+### 评估脚本配置化
 
 - `LIBERO_evaluation/libero_client_4tasks.py`
-  - 将 `SERVER_URL` 默认值从 `ws://0.0.0.0:9000` 改成更适合作为客户端目标的 `ws://127.0.0.1:9000`。
-  - 支持通过环境变量覆盖 `SERVER_URL`、episode 数、seed、日志目录、视频目录等。
-  - 减少 `print()`，统一使用 logging。
+  - 客户端默认地址从 `ws://0.0.0.0:9000` 修正为 `ws://127.0.0.1:9000`。
+  - 支持环境变量：
+    - `EVO1_SERVER_URI`
+    - `EVO1_LIBERO_SERVER_URL`
+    - `EVO1_LIBERO_HORIZON`
+    - `EVO1_LIBERO_MAX_STEPS`
+    - `EVO1_LIBERO_TASK_SUITES`
+    - `EVO1_LIBERO_EPISODES`
+    - `EVO1_LIBERO_SEED`
+    - `EVO1_LIBERO_LOG_DIR`
+    - `EVO1_LIBERO_VIDEO_DIR`
 
 - `MetaWorld_evaluation/mt50_evo1_client_prompt.py`
-  - 支持通过环境变量覆盖 server URL、episode 数、horizon、seed、是否保存视频、日志目录等。
-  - 保留默认行为，避免破坏 README 中的复现路径。
+  - 支持环境变量：
+    - `EVO1_SERVER_URI`
+    - `EVO1_MT50_SERVER_URL`
+    - `EVO1_MT50_EPISODES`
+    - `EVO1_MT50_EPISODE_HORIZON`
+    - `EVO1_MT50_HORIZON`
+    - `EVO1_MT50_SEED`
+    - `EVO1_MT50_SAVE_VIDEO`
+    - `EVO1_MT50_LOG_DIR`
+    - `EVO1_MT50_VIDEO_DIR`
+    - `EVO1_MT50_TARGET_LEVEL`
+    - `EVO1_MAX_MESSAGE_SIZE`
 
-### 训练脚本稳健性
+### README
 
-- 将 CUDA/bfloat16 autocast 根据 `--device` 自动选择，避免 CPU 环境或非 CUDA 环境直接失败。
-- 检查 checkpoint 保存逻辑中对 `model_engine.save_checkpoint()` 的假设。
-- 对 `resume_path`、`dataset_config_path`、`save_dir` 做更明确的路径校验和错误信息。
-- 考虑把训练配置从长命令迁移到 YAML/JSON 配置文件，减少复现实验命令长度。
+- 新增本地开发检查说明。
+- 新增 MetaWorld/LIBERO 环境变量使用示例。
+- 新增远程服务器部署说明。
+- 记录 `HF_HOME`、`HUGGINGFACE_HUB_CACHE`、`PIP_CACHE_DIR`、`TMPDIR` 等数据盘路径建议。
+- 记录 `flash-attn` cross-device link 安装问题的处理方式。
 
-### Dataset 与缓存治理
+## 服务器部署状态
 
-- 对 cache 版本加入元信息，避免 dataset 配置变化后复用旧 cache。
-- 检查 `_pad_tensor()` 是否需要显式拒绝超过 `max_dim` 的数据，而不是运行时 tensor assignment 报错。
-- 对视频读取失败、缺失 view、timestamp 越界增加更清楚的错误上下文。
+服务器硬件：
 
-### 依赖与复现
+- GPU：NVIDIA GeForce RTX 4090 D
+- 显存：24564 MiB
+- 数据盘：`/root/autodl-tmp`，50GB
 
-- 细化 `requirements.txt` 中的浮动依赖版本。
-- 拆分运行依赖、训练依赖、评估依赖和开发依赖。
-- 补充服务器环境说明，包括 CUDA、PyTorch、flash-attn、DeepSpeed 的匹配版本。
+已安装：
 
-### 测试与验证
+- Miniforge：`/root/autodl-tmp/miniforge3`
+- Conda env：`Evo1`
+- Python：3.10.20
+- Torch：2.5.1+cu124
+- Torchvision：0.20.1
+- flash-attn：2.8.3
+- 其余 `Evo_1/requirements.txt` 依赖
+- 轻量开发依赖：`pytest`、`ruff`
 
-- 本地轻量验证：
-  - `python3 -m pytest`
-  - `python3 -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation`
-  - `python3 -m ruff check .`
-- 服务器重型验证：
-  - 安装完整依赖。
-  - 下载 checkpoint。
-  - 启动 `Evo1_server.py`。
-  - 跑一条 MetaWorld smoke eval。
-  - 跑一条 LIBERO smoke eval。
-  - 如有数据集，跑短步数训练 smoke test。
+关键环境变量建议：
 
-## 服务器建议
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+export HF_HOME=/root/autodl-tmp/hf-home
+export HUGGINGFACE_HUB_CACHE=/root/autodl-tmp/hf-cache
+export PIP_CACHE_DIR=/root/autodl-tmp/pip-cache
+export TMPDIR=/root/autodl-tmp/tmp
+```
 
-当前不必须立刻租服务器。建议先完成本地工程化改造和轻量验证，再用服务器做重型验证。
+已下载 checkpoint：
 
-推荐服务器配置：
+- `/root/autodl-tmp/checkpoints/Evo1_MetaWorld`
+- `/root/autodl-tmp/checkpoints/Evo1_LIBERO`
 
-- Ubuntu 22.04 或接近环境。
-- Python 3.10。
-- CUDA 与 PyTorch 2.5.1 匹配。
-- GPU 显存 24GB 起步，48GB 更稳；如果要全量微调 VLM，80GB 更合适。
-- 磁盘至少 100GB。
-- 网络可访问 GitHub、Hugging Face、PyPI。
+已缓存基座模型：
 
-## 恢复工作时的建议顺序
+- `OpenGVLab/InternVL3-1B`，缓存位于 `/root/autodl-tmp/hf-cache`
 
-1. 先运行轻量测试和编译检查，确认当前未提交改动没有语法问题。
-2. 继续完成评估脚本参数化。
-3. 再处理训练脚本的设备/autocast/checkpoint 边界。
-4. 更新 README，记录新的开发验证命令和服务器验证流程。
-5. 在服务器上做完整依赖安装和 smoke test。
+## 已验证
+
+本地验证：
+
+```bash
+python3 -m pytest
+PYTHONPYCACHEPREFIX=/tmp/evo1_pycache python3 -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation tests
+git diff --check
+```
+
+本地结果：
+
+- `pytest`：5 passed, 1 skipped（本地无 torch，跳过 torch 相关测试）
+- `compileall`：通过
+- `git diff --check`：通过
+
+服务器验证：
+
+```bash
+python -m pytest
+python -m ruff check .
+python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation tests
+```
+
+服务器结果：
+
+- `pytest`：6 passed
+- `ruff check .`：通过
+- `compileall`：通过
+- `torch.cuda.is_available()`：True
+- GPU：NVIDIA GeForce RTX 4090 D
+
+重型 smoke 验证：
+
+- MetaWorld checkpoint 加载成功。
+- LIBERO checkpoint 加载成功。
+- 使用 MetaWorld checkpoint 跑 dummy JSON inference 成功。
+- 输出动作维度：`50 x 24`。
+
+## 尚未完成
+
+- GitHub push 尚未完成，需要仓库写权限或新的目标 remote。
+- 尚未安装 MetaWorld 评估环境并跑真实 MT50 smoke eval。
+- 尚未安装 LIBERO 评估环境并跑真实 LIBERO smoke eval。
+- 尚未下载训练数据集并跑短步数训练 smoke test。
+- `requirements.txt` 仍有部分浮动依赖，后续可进一步锁定版本。
+- `flash-attn` 目前按服务器实际环境安装成功，尚未写入主 requirements，避免无 GPU/无匹配 wheel 环境被强绑定。
+
+## 下一步建议
+
+1. 处理 GitHub 权限：
+   - 给 `myserendipity137` 写权限，或
+   - 添加一个有写权限的新 remote。
+2. 在服务器继续安装 MetaWorld 环境，跑 `EVO1_MT50_EPISODES=1` 的真实 smoke eval。
+3. 安装 LIBERO 环境，跑 `EVO1_LIBERO_EPISODES=1` 的真实 smoke eval。
+4. 下载小规模训练数据或抽样数据，跑 `max_steps=1` 到 `10` 的训练 smoke test。
+5. 根据真实 eval/training 结果继续修复工程问题。
