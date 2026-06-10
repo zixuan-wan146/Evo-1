@@ -63,6 +63,7 @@
 - `Evo_1/model/action_head/flow_matching.py`
   - 修复 `FlowmatchingActionHead(config=None, ...)` 构造路径。
   - 显式校验 `action_dim == horizon * per_action_dim`。
+  - 将 action sequence horizon 与训练 `action_mask` shape 校验从 `assert` 改为显式 `ValueError`。
 
 - `Evo_1/scripts/train.py`
   - 增加训练配置校验。

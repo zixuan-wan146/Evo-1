@@ -92,7 +92,8 @@ class MultiEmbodimentActionEncoder(nn.Module):
     def forward(self, action_seq: torch.Tensor, category_id: torch.LongTensor):
 
         B, H, D = action_seq.shape
-        assert H == self.horizon, "Action sequence length must match horizon"
+        if H != self.horizon:
+            raise ValueError(f"Action sequence length {H} must match horizon {self.horizon}")
        
         x = action_seq.reshape(B * H, D) 
       
@@ -267,7 +268,8 @@ class FlowmatchingActionHead(nn.Module):
 
         if action_mask is not None:
             action_mask = action_mask.to(dtype=noise.dtype, device=noise.device)
-            assert action_mask.shape == noise.shape, f"action_mask shape {action_mask.shape} != noise shape {noise.shape}"
+            if action_mask.shape != noise.shape:
+                raise ValueError(f"action_mask shape {action_mask.shape} != noise shape {noise.shape}")
             noise = noise * action_mask
 
 
