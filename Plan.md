@@ -14,9 +14,15 @@
   - `User root`
   - `IdentityFile /home/myser/.ssh/id_ed25519_autodl`
 - GitHub 推送状态：
-  - 本地提交已完成。
+  - 本地提交已完成，但本地 `main` 仍领先 `origin/main`。
   - `git push origin main` 失败，原因是当前凭据 `myserendipity137` 没有 `zixuan-wan146/Evo-1.git` 写权限。
   - 需要给该账号写权限，或提供有权限的新 remote。
+- 服务器状态：
+  - LIBERO 部署和 smoke 已完成。
+  - 服务器已按要求关机，后续 SSH 检查表现为 connection refused。
+- 下载源说明：
+  - 服务器部署时曾按环境建议使用 Hugging Face mirror 加速模型/assets 下载。
+  - 后续不再修改全局下载源；如需临时加速，应限制在单条命令或单个环境变量内，避免影响国内资源下载。
 
 ## 已完成提交
 
@@ -26,6 +32,13 @@
 - `c97cfa8 Document remote setup and checkpoint loading`
 - `a2888f2 Add practical lint gate`
 - `Complete LIBERO remote smoke setup`（本轮新增，记录 LIBERO 环境、assets、smoke 结果和客户端修复）
+- `Add reproducible LIBERO workflow scripts`
+- `Add repository preflight checks`
+- `Harden flow matching shape validation`
+- `Test LIBERO client configuration`
+- `Validate LIBERO action responses`
+- `Test training configuration validation`
+- `Make dataset config path resolution explicit`（本轮新增，记录训练数据配置路径解析规则）
 
 服务器对应提交：
 
@@ -68,6 +81,7 @@
 - `Evo_1/scripts/train.py`
   - 增加训练配置校验。
   - 将训练配置校验抽到 `Evo_1/training_config.py`，可在无 torch/accelerate 的本地环境中测试。
+  - 新增 `--dataset_config_base_dir`，训练数据 YAML 内的相对路径不再依赖启动目录。
   - 检查空 dataset 和空 dataloader。
   - 训练 forward 时传入 `embodiment_ids`。
   - 将 shape `assert` 改为显式 `ValueError`。
@@ -86,6 +100,11 @@
   - 样本失败读取从无限递归改为有限重试。
   - 空 dataset 显式报错。
   - `_pad_tensor()` 显式拒绝超过 `max_dim` 的张量。
+
+- `Evo_1/dataset/config_utils.py`
+  - 新增 dataset config 结构校验。
+  - 新增 dataset path 解析工具。
+  - 训练入口和 preflight 共用同一套路径解析逻辑。
 
 ### 评估脚本配置化
 
@@ -131,6 +150,7 @@
 - 新增本地开发检查说明。
 - 新增 MetaWorld/LIBERO 环境变量使用示例。
 - 新增远程服务器部署说明。
+- 新增训练数据路径解析说明：`dataset/config.yaml` 内的相对路径从 `--dataset_config_base_dir` 解析。
 - 记录 `HF_HOME`、`HUGGINGFACE_HUB_CACHE`、`PIP_CACHE_DIR`、`TMPDIR` 等数据盘路径建议。
 - 记录 `flash-attn` cross-device link 安装问题的处理方式。
 
@@ -212,15 +232,20 @@ export TMPDIR=/root/autodl-tmp/tmp
 
 ```bash
 python3 -m pytest
-PYTHONPYCACHEPREFIX=/tmp/evo1_pycache python3 -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation tests
+python3 scripts/preflight.py
+bash -n scripts/*.sh
+PYTHONPYCACHEPREFIX=/tmp/evo1_pycache python3 -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation scripts tests
 git diff --check
 ```
 
 本地结果：
 
-- `pytest`：5 passed, 1 skipped（本地无 torch，跳过 torch 相关测试）
+- `pytest`：34 passed, 3 skipped
+- `scripts/preflight.py`：通过；仅提示默认训练数据路径不存在的 WARN（本地未放完整训练数据，非失败）
+- `bash -n scripts/*.sh`：通过
 - `compileall`：通过
 - `git diff --check`：通过
+- `python3 -m ruff check .`：未运行成功，本地 Python 环境未安装 `ruff`
 
 服务器验证：
 

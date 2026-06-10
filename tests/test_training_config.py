@@ -55,6 +55,18 @@ def test_validate_training_config_rejects_missing_dataset_config():
         validate_training_config(valid_config(), cuda_available=False, path_exists=lambda path: False)
 
 
+def test_validate_training_config_rejects_missing_dataset_config_base_dir():
+    config = valid_config()
+    config["dataset_config_base_dir"] = "Evo_1"
+
+    with pytest.raises(FileNotFoundError, match="Dataset config base directory not found"):
+        validate_training_config(
+            config,
+            cuda_available=False,
+            path_exists=existing_paths("dataset/config.yaml"),
+        )
+
+
 def test_validate_training_config_rejects_non_positive_ints():
     config = valid_config()
     config["batch_size"] = 0

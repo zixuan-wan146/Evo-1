@@ -45,6 +45,10 @@ def validate_training_config(
     if not path_exists(dataset_config):
         raise FileNotFoundError(f"Dataset config file not found: {dataset_config_path}")
 
+    dataset_config_base_dir = config.get("dataset_config_base_dir")
+    if dataset_config_base_dir and not path_exists(Path(str(dataset_config_base_dir))):
+        raise FileNotFoundError(f"Dataset config base directory not found: {dataset_config_base_dir}")
+
     for key in POSITIVE_INT_KEYS:
         value = _as_int(config.get(key, 0), f"--{key}")
         if value <= 0:

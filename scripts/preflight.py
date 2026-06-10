@@ -11,6 +11,16 @@ import sys
 from dataclasses import dataclass
 from typing import Any
 
+REPO_ROOT_FOR_IMPORTS = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT_FOR_IMPORTS) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT_FOR_IMPORTS))
+
+from Evo_1.dataset.config_utils import (  # noqa: E402
+    iter_dataset_entries,
+    resolve_dataset_config_paths,
+    validate_dataset_config_structure,
+)
+
 
 REQUIRED_REPO_FILES = (
     "README.md",
@@ -18,6 +28,7 @@ REQUIRED_REPO_FILES = (
     "Evo_1/scripts/Evo1_server.py",
     "Evo_1/scripts/train.py",
     "Evo_1/dataset/config.yaml",
+    "Evo_1/dataset/config_utils.py",
     "LIBERO_evaluation/libero_action_protocol.py",
     "LIBERO_evaluation/libero_client_config.py",
     "LIBERO_evaluation/libero_client_4tasks.py",
@@ -210,13 +221,6 @@ def load_yaml_if_available(path: Path, report: Report) -> dict[str, Any] | None:
     return loaded
 
 
-def resolve_dataset_path(raw_path: str, base_dir: Path) -> Path:
-    path = Path(raw_path).expanduser()
-    if path.is_absolute():
-        return path
-    return (base_dir / path).resolve()
-
-
 def check_dataset_config(config_path: Path, base_dir: Path, strict_data: bool, report: Report) -> None:
     if not config_path.exists():
         report.fail("dataset", f"dataset config does not exist: {config_path}")
@@ -226,52 +230,35 @@ def check_dataset_config(config_path: Path, base_dir: Path, strict_data: bool, r
     if config is None:
         return
 
-    for key in ("max_action_dim", "max_state_dim", "max_views"):
-        value = config.get(key)
-        if not isinstance(value, int) or value <= 0:
-            report.fail("dataset", f"{key} must be a positive integer")
-            return
-
-    data_groups = config.get("data_groups")
-    if not isinstance(data_groups, dict) or not data_groups:
-        report.fail("dataset", "data_groups must be a non-empty mapping")
+    try:
+        dataset_count = validate_dataset_config_structure(config)
+        resolved_config = resolve_dataset_config_paths(config, base_dir)
+    except (TypeError, ValueError) as exc:
+        report.fail("dataset", str(exc))
         return
 
-    dataset_count = 0
     missing_paths: list[str] = []
     missing_required_data: list[str] = []
-    for group_name, group_config in data_groups.items():
-        if not isinstance(group_config, dict) or not group_config:
-            report.fail("dataset", f"data group {group_name!r} must contain datasets")
-            return
-        for dataset_name, dataset_config in group_config.items():
-            dataset_count += 1
-            if not isinstance(dataset_config, dict):
-                report.fail("dataset", f"dataset {group_name}/{dataset_name} must be a mapping")
-                return
-            raw_path = dataset_config.get("path")
-            if not isinstance(raw_path, str) or not raw_path:
-                report.fail("dataset", f"dataset {group_name}/{dataset_name} has no path")
-                return
-            dataset_path = resolve_dataset_path(raw_path, base_dir)
-            if not dataset_path.exists():
-                missing_paths.append(f"{group_name}/{dataset_name}: {dataset_path}")
-                continue
-            if strict_data:
-                required_paths = (
-                    dataset_path / "meta" / "tasks.jsonl",
-                    dataset_path / "meta" / "episodes.jsonl",
-                )
-                for required_path in required_paths:
-                    if not required_path.exists():
-                        missing_required_data.append(str(required_path))
-                has_stats = (dataset_path / "meta" / "stats.json").exists() or (
-                    dataset_path / "meta" / "episodes_stats.jsonl"
-                ).exists()
-                if not has_stats:
-                    missing_required_data.append(str(dataset_path / "meta" / "stats.json"))
-                if not list(dataset_path.glob("data/*/*.parquet")):
-                    missing_required_data.append(str(dataset_path / "data/*/*.parquet"))
+    for group_name, dataset_name, dataset_config in iter_dataset_entries(resolved_config):
+        dataset_path = Path(str(dataset_config["path"]))
+        if not dataset_path.exists():
+            missing_paths.append(f"{group_name}/{dataset_name}: {dataset_path}")
+            continue
+        if strict_data:
+            required_paths = (
+                dataset_path / "meta" / "tasks.jsonl",
+                dataset_path / "meta" / "episodes.jsonl",
+            )
+            for required_path in required_paths:
+                if not required_path.exists():
+                    missing_required_data.append(str(required_path))
+            has_stats = (dataset_path / "meta" / "stats.json").exists() or (
+                dataset_path / "meta" / "episodes_stats.jsonl"
+            ).exists()
+            if not has_stats:
+                missing_required_data.append(str(dataset_path / "meta" / "stats.json"))
+            if not list(dataset_path.glob("data/*/*.parquet")):
+                missing_required_data.append(str(dataset_path / "data/*/*.parquet"))
 
     if missing_paths:
         message = "configured dataset paths do not exist: " + "; ".join(missing_paths)

@@ -23,6 +23,7 @@ import json
 import shutil
 from torch.optim import AdamW
 from training_config import validate_training_config
+from dataset.config_utils import resolve_dataset_config_paths
 
 import warnings
 
@@ -160,6 +161,10 @@ def prepare_dataset(config: dict) -> torch.utils.data.Dataset:
 
         with open(config.get("dataset_config_path"), 'r') as f:
             dataset_config = yaml.safe_load(f)
+        dataset_config_base_dir = Path(
+            get_with_warning(config, "dataset_config_base_dir", str(PROJECT_ROOT))
+        ).expanduser().resolve()
+        dataset_config = resolve_dataset_config_paths(dataset_config, dataset_config_base_dir)
 
         dataset = SimulationDataset(
             config=dataset_config,
@@ -173,7 +178,13 @@ def prepare_dataset(config: dict) -> torch.utils.data.Dataset:
     else:
         raise ValueError(f"Unknown dataset_type: {dataset_type}")
     if accelerator is None or accelerator.is_main_process:
-        logging.info(f"Loaded {len(dataset)} samples using {config.get('dataset_config_path')} ({dataset_type})")
+        logging.info(
+            "Loaded %s samples using %s (%s), dataset paths resolved from %s",
+            len(dataset),
+            config.get("dataset_config_path"),
+            dataset_type,
+            dataset_config_base_dir,
+        )
     return dataset
 
 
@@ -582,6 +593,12 @@ if __name__ == "__main__":
     # Dataset
     parser.add_argument("--dataset_type", type=str, default="simulation")
     parser.add_argument("--dataset_config_path", type=str, required=True)
+    parser.add_argument(
+        "--dataset_config_base_dir",
+        type=str,
+        default=str(PROJECT_ROOT),
+        help="Base directory for relative paths inside dataset_config_path. Defaults to the Evo_1 project root.",
+    )
     parser.add_argument("--cache_dir", type=str, default=None)
     parser.add_argument("--image_size", type=int, default=448)
     parser.add_argument("--binarize_gripper", action="store_true", default=False, help="Whether to binarize gripper state/action (default: False).")

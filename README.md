@@ -205,6 +205,7 @@ accelerate launch --num_processes 1 --num_machines 1 --deepspeed_config_file ds_
   --disable_wandb \
   --vlm_name OpenGVLab/InternVL3-1B \
   --dataset_config_path dataset/config.yaml \
+  --dataset_config_base_dir . \
   --per_action_dim 24 \
   --state_dim 24 \
   --save_dir /path/to/checkpoints/stage1
@@ -237,6 +238,7 @@ accelerate launch --num_processes 1 --num_machines 1 --deepspeed_config_file ds_
   --disable_wandb \
   --vlm_name OpenGVLab/InternVL3-1B \
   --dataset_config_path dataset/config.yaml \
+  --dataset_config_base_dir . \
   --per_action_dim 24 \
   --state_dim 24 \
   --save_dir /path/to/checkpoints/stage2 \
@@ -245,6 +247,9 @@ accelerate launch --num_processes 1 --num_machines 1 --deepspeed_config_file ds_
   --resume_path /path/to/checkpoints/stage1/step_5000
 ```
 
+Relative dataset paths inside `dataset/config.yaml` are resolved from `--dataset_config_base_dir`.
+The examples above use `.` because they run from `Evo_1/`; if launching from the repository root,
+use `--dataset_config_path Evo_1/dataset/config.yaml --dataset_config_base_dir Evo_1`.
 Use `--cache_dir /path/to/cache` if you want the generated training cache outside the project directory.
 
 ## Remote Deployment Notes
