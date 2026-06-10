@@ -54,6 +54,16 @@ python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation scripts tes
 The lightweight tests avoid downloading model weights. Tests that require PyTorch are skipped when
 PyTorch is not installed.
 
+If the GitHub remote is temporarily unavailable or your account lacks write permission, export the
+local commits as a portable patch bundle:
+
+```bash
+scripts/export_unpushed_commits.sh
+```
+
+The export is written under `exports/` and can be applied to another clone with
+`git am /path/to/export/patches/*.patch`.
+
 ## MetaWorld Evaluation
 
 Create a separate environment for MetaWorld:
@@ -316,11 +326,14 @@ system disk. For example:
 ```bash
 cd /root/autodl-tmp
 git clone https://github.com/zixuan-wan146/Evo-1.git
-export HF_ENDPOINT=https://hf-mirror.com
 export HF_HOME=/root/autodl-tmp/hf-home
 export HUGGINGFACE_HUB_CACHE=/root/autodl-tmp/hf-cache
 export PIP_CACHE_DIR=/root/autodl-tmp/pip-cache
 ```
+
+Only set `HF_ENDPOINT=https://hf-mirror.com` for a single Hugging Face download command when that
+specific external download benefits from it. Do not put it in shell startup files or global env
+configuration, because it can slow down downloads from domestic resources.
 
 Download checkpoints to the data disk:
 

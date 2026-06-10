@@ -48,6 +48,7 @@
 - `Preflight checkpoint before server start`（本轮新增，启动 Evo-1 server 前自动运行 checkpoint preflight）
 - `Check LIBERO result consistency`（本轮新增，preflight 会校验 summary 与 episode 明细一致）
 - `Add full LIBERO eval launcher`（本轮新增，将正式 eval 入口与 smoke 入口分离）
+- `Export unpushed commits as patches`（本轮新增，GitHub 权限阻塞时导出可迁移 patch bundle）
 
 服务器对应提交：
 
@@ -213,6 +214,11 @@
 - 新增 `scripts/run_libero_eval.sh`
   - 固化正式 eval 默认配置：4 个 LIBERO suite、10 episodes、horizon 14、max steps `25,25,25,95`。
   - 支持 `EVO1_LIBERO_DRY_RUN=1` 打印环境变量而不运行客户端。
+- 新增 `scripts/export_unpushed_commits.sh`
+  - 默认以 `origin/main` 为基线导出本地领先提交。
+  - 默认输出到 `exports/unpushed_commits_<UTC time>/`。
+  - 输出 `patches/*.patch`、`manifest.json` 和应用说明 `README.md`。
+  - 适用于当前 GitHub remote 无写权限时，把本地工程化改造迁移到新 remote 或服务器。
 - 新增 `scripts/summarize_libero_results.py`
   - 支持输入 result JSON 文件、目录或 glob。
   - 输出 overall 和 per-suite 行。
@@ -254,12 +260,14 @@ LIBERO 评估环境：
 关键环境变量建议：
 
 ```bash
-export HF_ENDPOINT=https://hf-mirror.com
 export HF_HOME=/root/autodl-tmp/hf-home
 export HUGGINGFACE_HUB_CACHE=/root/autodl-tmp/hf-cache
 export PIP_CACHE_DIR=/root/autodl-tmp/pip-cache
 export TMPDIR=/root/autodl-tmp/tmp
 ```
+
+`HF_ENDPOINT=https://hf-mirror.com` 只建议在单次 Hugging Face 外网下载命令前临时设置，不写入全局
+shell 启动文件或系统环境，避免拖慢国内资源下载。
 
 已下载 checkpoint：
 
@@ -284,7 +292,7 @@ git diff --check
 
 本地结果：
 
-- `pytest`：65 passed, 3 skipped
+- `pytest`：67 passed, 3 skipped
 - `scripts/preflight.py`：通过；仅提示默认训练数据路径不存在的 WARN（本地未放完整训练数据，非失败）
 - `bash -n scripts/*.sh`：通过
 - `compileall`：通过
