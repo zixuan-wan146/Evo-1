@@ -144,6 +144,17 @@ LIBERO_PYTHON=/root/autodl-tmp/envs/libero/bin/python \
 scripts/run_libero_smoke.sh
 ```
 
+Run the full default LIBERO evaluation when you are ready to collect comparable numbers:
+
+```bash
+LIBERO_PYTHON=/root/autodl-tmp/envs/libero/bin/python \
+scripts/run_libero_eval.sh
+```
+
+`scripts/run_libero_eval.sh` defaults to all four LIBERO suites, `EVO1_LIBERO_HORIZON=14`,
+`EVO1_LIBERO_EPISODES=10`, and max steps `25,25,25,95`. Set `EVO1_LIBERO_DRY_RUN=1` to print the
+resolved eval environment without running the client.
+
 The LIBERO client stores logs, videos, and a machine-readable result summary under
 `LIBERO_evaluation/`.
 

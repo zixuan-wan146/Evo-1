@@ -47,6 +47,7 @@
 - `Validate checkpoint metadata`（本轮新增，preflight 可检查 checkpoint config/norm_stats 结构）
 - `Preflight checkpoint before server start`（本轮新增，启动 Evo-1 server 前自动运行 checkpoint preflight）
 - `Check LIBERO result consistency`（本轮新增，preflight 会校验 summary 与 episode 明细一致）
+- `Add full LIBERO eval launcher`（本轮新增，将正式 eval 入口与 smoke 入口分离）
 
 服务器对应提交：
 
@@ -182,6 +183,7 @@
 - 新增 LIBERO result 校验会比较 overall/per-suite summary 与 episode 明细一致性的说明。
 - 新增 checkpoint preflight 会检查 `config.json` 关键维度和 `norm_stats.json` min/max 结构的说明。
 - 新增 `scripts/start_evo1_server.sh` 默认先跑 checkpoint preflight、可用 `EVO1_SKIP_PREFLIGHT=1` 跳过的说明。
+- 新增 `scripts/run_libero_eval.sh` 正式 LIBERO eval 入口和 dry-run 说明。
 - 记录 `HF_HOME`、`HUGGINGFACE_HUB_CACHE`、`PIP_CACHE_DIR`、`TMPDIR` 等数据盘路径建议。
 - 记录 `flash-attn` cross-device link 安装问题的处理方式。
 
@@ -208,6 +210,9 @@
   - 固化 1 task / 1 episode / 1 step 的 LIBERO smoke 默认配置。
   - 支持通过环境变量扩展到更长 eval。
   - 默认写出 `${EVO1_LIBERO_CKPT_NAME}_results.json`。
+- 新增 `scripts/run_libero_eval.sh`
+  - 固化正式 eval 默认配置：4 个 LIBERO suite、10 episodes、horizon 14、max steps `25,25,25,95`。
+  - 支持 `EVO1_LIBERO_DRY_RUN=1` 打印环境变量而不运行客户端。
 - 新增 `scripts/summarize_libero_results.py`
   - 支持输入 result JSON 文件、目录或 glob。
   - 输出 overall 和 per-suite 行。
@@ -279,7 +284,7 @@ git diff --check
 
 本地结果：
 
-- `pytest`：63 passed, 3 skipped
+- `pytest`：65 passed, 3 skipped
 - `scripts/preflight.py`：通过；仅提示默认训练数据路径不存在的 WARN（本地未放完整训练数据，非失败）
 - `bash -n scripts/*.sh`：通过
 - `compileall`：通过
