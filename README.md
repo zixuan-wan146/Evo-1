@@ -134,6 +134,9 @@ EVO1_PYTHON=/root/autodl-tmp/miniforge3/envs/Evo1/bin/python \
 scripts/start_evo1_server.sh /path/to/checkpoint
 ```
 
+`scripts/start_evo1_server.sh` runs a lightweight checkpoint preflight before loading the model.
+Set `EVO1_SKIP_PREFLIGHT=1` only when deliberately bypassing that check for debugging.
+
 Run the minimal LIBERO smoke client from another shell:
 
 ```bash
