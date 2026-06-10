@@ -31,6 +31,7 @@ REQUIRED_REPO_FILES = (
     "Evo_1/dataset/config_utils.py",
     "LIBERO_evaluation/libero_action_protocol.py",
     "LIBERO_evaluation/libero_client_config.py",
+    "LIBERO_evaluation/libero_eval_summary.py",
     "LIBERO_evaluation/libero_client_4tasks.py",
     "scripts/preflight.py",
     "scripts/setup_libero_env.sh",

@@ -16,6 +16,7 @@ def test_default_config_matches_documented_smoke_server():
     assert config.max_steps == [25, 25, 25, 95]
     assert config.horizon == 14
     assert config.mujoco_gl == "osmesa"
+    assert config.result_file == "./log_file/Evo1_libero_all_results.json"
 
 
 def test_single_max_steps_value_expands_to_all_task_suites():
@@ -39,6 +40,12 @@ def test_server_url_prefers_shared_env_var():
     )
 
     assert config.server_url == "ws://server-uri:9000"
+
+
+def test_result_file_can_be_overridden():
+    config = LiberoClientConfig.from_env({"EVO1_LIBERO_RESULT_FILE": "/tmp/results.json"})
+
+    assert config.result_file == "/tmp/results.json"
 
 
 def test_invalid_max_steps_count_is_rejected():

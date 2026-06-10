@@ -39,6 +39,7 @@
 - `Validate LIBERO action responses`
 - `Test training configuration validation`
 - `Make dataset config path resolution explicit`（本轮新增，记录训练数据配置路径解析规则）
+- `Record LIBERO evaluation summaries`（本轮新增，记录 LIBERO 评估结果 JSON、失败原因和统计汇总）
 
 服务器对应提交：
 
@@ -117,6 +118,9 @@
   - 客户端默认地址从 `ws://0.0.0.0:9000` 修正为 `ws://127.0.0.1:9000`。
   - 支持单值 `EVO1_LIBERO_MAX_STEPS` 自动扩展到多个 task suite。
   - 新增 `EVO1_LIBERO_TASK_LIMIT`，用于轻量 smoke 测试只跑前 N 个 task。
+  - 评估后写出机器可读 JSON summary，包含 episode 明细、suite 成功率和失败原因。
+  - 动作解析失败、非法动作、步数耗尽都会记录明确 failure reason。
+  - 每个 task 的 LIBERO env 用完后显式 close，避免长评估资源泄漏。
   - 支持环境变量：
     - `EVO1_SERVER_URI`
     - `EVO1_LIBERO_SERVER_URL`
@@ -130,6 +134,12 @@
     - `EVO1_LIBERO_LOG_DIR`
     - `EVO1_LIBERO_VIDEO_DIR`
     - `EVO1_LIBERO_LOG_FILE`
+    - `EVO1_LIBERO_RESULT_FILE`
+
+- `LIBERO_evaluation/libero_eval_summary.py`
+  - 新增 `EpisodeResult` 结构。
+  - 新增成功率、平均步数、suite 分组统计。
+  - 新增结果 JSON 写盘函数，可在无 LIBERO/robosuite 的本地环境中测试。
 
 - `MetaWorld_evaluation/mt50_evo1_client_prompt.py`
   - 支持环境变量：
@@ -151,6 +161,7 @@
 - 新增 MetaWorld/LIBERO 环境变量使用示例。
 - 新增远程服务器部署说明。
 - 新增训练数据路径解析说明：`dataset/config.yaml` 内的相对路径从 `--dataset_config_base_dir` 解析。
+- 新增 LIBERO result summary JSON 的说明和路径覆盖示例。
 - 记录 `HF_HOME`、`HUGGINGFACE_HUB_CACHE`、`PIP_CACHE_DIR`、`TMPDIR` 等数据盘路径建议。
 - 记录 `flash-attn` cross-device link 安装问题的处理方式。
 
@@ -174,6 +185,7 @@
 - 新增 `scripts/run_libero_smoke.sh`
   - 固化 1 task / 1 episode / 1 step 的 LIBERO smoke 默认配置。
   - 支持通过环境变量扩展到更长 eval。
+  - 默认写出 `${EVO1_LIBERO_CKPT_NAME}_results.json`。
 - CI 新增 shell 脚本语法检查、`scripts/preflight.py` 和 `compileall scripts`。
 
 ## 服务器部署状态
@@ -240,7 +252,7 @@ git diff --check
 
 本地结果：
 
-- `pytest`：34 passed, 3 skipped
+- `pytest`：37 passed, 3 skipped
 - `scripts/preflight.py`：通过；仅提示默认训练数据路径不存在的 WARN（本地未放完整训练数据，非失败）
 - `bash -n scripts/*.sh`：通过
 - `compileall`：通过
@@ -286,6 +298,7 @@ python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation tests
 - GitHub push 尚未完成，需要仓库写权限或新的目标 remote。
 - MetaWorld 已按用户要求停止，不再继续安装或评估。
 - 尚未跑完整 LIBERO suite eval，目前只跑了 1 task/1 episode/1 step 的 smoke。
+- 最新的 LIBERO result summary JSON 改动只完成了本地单元测试，服务器已关机，尚未在真实 LIBERO 环境上重跑 smoke。
 - 尚未下载训练数据集并跑短步数训练 smoke test。
 - `requirements.txt` 仍有部分浮动依赖，后续可进一步锁定版本。
 - `flash-attn` 目前按服务器实际环境安装成功，尚未写入主 requirements，避免无 GPU/无匹配 wheel 环境被强绑定。

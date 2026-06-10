@@ -133,7 +133,8 @@ LIBERO_PYTHON=/root/autodl-tmp/envs/libero/bin/python \
 scripts/run_libero_smoke.sh
 ```
 
-The LIBERO client stores logs and videos under `LIBERO_evaluation/`.
+The LIBERO client stores logs, videos, and a machine-readable result summary under
+`LIBERO_evaluation/`.
 
 Common LIBERO client settings can be overridden without editing source code:
 
@@ -144,8 +145,12 @@ export EVO1_LIBERO_EPISODES=1
 export EVO1_LIBERO_TASK_SUITES=libero_spatial
 export EVO1_LIBERO_TASK_LIMIT=1
 export EVO1_LIBERO_MAX_STEPS=25
+export EVO1_LIBERO_RESULT_FILE="$PWD/LIBERO_evaluation/log_file/libero_spatial_results.json"
 LIBERO_PYTHON=/root/autodl-tmp/envs/libero/bin/python scripts/run_libero_smoke.sh
 ```
+
+The result summary JSON contains the evaluated episodes, per-suite success rates, and failure reasons
+such as action parsing errors or step-limit exhaustion.
 
 For headless smoke tests, `EVO1_MUJOCO_GL=osmesa` is the more stable default. Use
 `EVO1_MUJOCO_GL=egl` on GPU servers when EGL cleanup warnings are acceptable and

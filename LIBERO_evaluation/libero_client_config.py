@@ -70,6 +70,7 @@ class LiberoClientConfig:
     log_dir: str
     video_dir: str
     log_file: str
+    result_file: str
     num_episodes: int
     task_limit: int
     seed: int
@@ -82,6 +83,7 @@ class LiberoClientConfig:
         log_dir = environ.get("EVO1_LIBERO_LOG_DIR", "./log_file")
         video_dir = environ.get("EVO1_LIBERO_VIDEO_DIR", f"./video_log_file/{ckpt_name}")
         log_file = environ.get("EVO1_LIBERO_LOG_FILE", os.path.join(log_dir, f"{ckpt_name}.txt"))
+        result_file = environ.get("EVO1_LIBERO_RESULT_FILE", os.path.join(log_dir, f"{ckpt_name}_results.json"))
         task_suites = env_list(environ, "EVO1_LIBERO_TASK_SUITES", DEFAULT_TASK_SUITES)
         max_steps = align_max_steps(env_int_list(environ, "EVO1_LIBERO_MAX_STEPS", DEFAULT_MAX_STEPS), task_suites)
 
@@ -94,6 +96,7 @@ class LiberoClientConfig:
             log_dir=log_dir,
             video_dir=video_dir,
             log_file=log_file,
+            result_file=result_file,
             num_episodes=env_int(environ, "EVO1_LIBERO_EPISODES", 10),
             task_limit=env_int(environ, "EVO1_LIBERO_TASK_LIMIT", 0),
             seed=env_int(environ, "EVO1_LIBERO_SEED", 42),
