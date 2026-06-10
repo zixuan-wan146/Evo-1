@@ -1,164 +1,157 @@
-# evo1_server_json.py
-
-import sys
-import os
+import argparse
 import asyncio
-import websockets
-import numpy as np
-import cv2
 import json
+import logging
+import sys
+from pathlib import Path
+
+import cv2
+import numpy as np
 import torch
+import websockets
 from PIL import Image
 from torchvision import transforms
-from fvcore.nn import FlopCountAnalysis
 
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from scripts.Evo1 import EVO1
-
-
-
-class Normalizer:
-    def __init__(self, stats_or_path):
-        if isinstance(stats_or_path, str):
-            with open(stats_or_path, "r") as f:
-                stats = json.load(f)
-        else:
-            stats = stats_or_path
-
-        def pad_to_24(x):
-            x = torch.tensor(x, dtype=torch.float32)
-            if x.shape[0] < 24:
-                pad = torch.zeros(24 - x.shape[0], dtype=torch.float32)
-                x = torch.cat([x, pad], dim=0)
-            elif x.shape[0] > 24:
-                raise ValueError(f"Input length {x.shape[0]} exceeds expected 24")
-            return x
-
-        if len(stats) != 1:
-            raise ValueError(f"norm_stats.json should contain only one robot key, but: {list(stats.keys())}")
-
-        robot_key = list(stats.keys())[0]
-        robot_stats = stats[robot_key]
-
-        self.state_min = pad_to_24(robot_stats["observation.state"]["min"])
-        self.state_max = pad_to_24(robot_stats["observation.state"]["max"])
-        self.action_min = pad_to_24(robot_stats["action"]["min"])
-        self.action_max = pad_to_24(robot_stats["action"]["max"])
-
-    def normalize_state(self, state: torch.Tensor) -> torch.Tensor:
-        state_min = self.state_min.to(state.device, dtype=state.dtype)
-        state_max = self.state_max.to(state.device, dtype=state.dtype)
-        return torch.clamp(2 * (state - state_min) / (state_max - state_min + 1e-8) - 1, -1.0, 1.0)
-
-    def denormalize_action(self, action: torch.Tensor) -> torch.Tensor:
-        action_min = self.action_min.to(action.device, dtype=action.dtype)
-        action_max = self.action_max.to(action.device, dtype=action.dtype)
-        if action.ndim == 1:
-            action = action.view(1, -1)
-        return (action + 1.0) / 2.0 * (action_max - action_min + 1e-8) + action_min
+from runtime_config import (
+    DEFAULT_MAX_MESSAGE_SIZE,
+    DEFAULT_SERVER_HOST,
+    DEFAULT_SERVER_PORT,
+    IMAGE_SIZE,
+    MAX_VIEWS,
+    TARGET_STATE_DIM,
+    normalize_mask,
+)
+from model.evo1 import EVO1
+from utils.normalization import NormalizationStats
 
 
-def load_model_and_normalizer(ckpt_dir):
-    config = json.load(open(os.path.join(ckpt_dir, "config.json")))
-    stats = json.load(open(os.path.join(ckpt_dir, "norm_stats.json")))
+def load_model_and_normalizer(ckpt_dir, device: str = "cuda", inference_steps: int = 32):
+    ckpt_dir = Path(ckpt_dir)
+    config_path = ckpt_dir / "config.json"
+    stats_path = ckpt_dir / "norm_stats.json"
+    ckpt_path = ckpt_dir / "mp_rank_00_model_states.pt"
 
+    for path in (config_path, stats_path, ckpt_path):
+        if not path.exists():
+            raise FileNotFoundError(f"Required checkpoint file not found: {path}")
+
+    with open(config_path, "r") as f:
+        config = json.load(f)
+    with open(stats_path, "r") as f:
+        stats = json.load(f)
+
+    config["device"] = device
     config["finetune_vlm"] = False
     config["finetune_action_head"] = False
-    config["num_inference_timesteps"] = 32
+    config["num_inference_timesteps"] = inference_steps
 
     model = EVO1(config).eval()
-    ckpt_path = os.path.join(ckpt_dir, "mp_rank_00_model_states.pt")
-
     checkpoint = torch.load(ckpt_path, map_location="cpu")
-    model.load_state_dict(checkpoint["module"], strict=True)
-    model = model.to("cuda")
+    state_dict = checkpoint["module"] if "module" in checkpoint else checkpoint
+    model.load_state_dict(state_dict, strict=True)
+    model = model.to(device)
 
-    normalizer = Normalizer(stats)
-    return model, normalizer
+    return model, NormalizationStats(stats)
 
 
-
-def decode_image_from_list(img_list):
+def decode_image_from_list(img_list, device) -> torch.Tensor:
     img_array = np.array(img_list, dtype=np.uint8)
-    img = cv2.resize(img_array, (448, 448))
+    img = cv2.resize(img_array, (IMAGE_SIZE, IMAGE_SIZE))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     pil = Image.fromarray(img)
-    return transforms.ToTensor()(pil).to("cuda")
+    return transforms.ToTensor()(pil).to(device)
 
+
+def pad_state_tensor(state: torch.Tensor, target_dim: int = TARGET_STATE_DIM) -> torch.Tensor:
+    if state.ndim == 1:
+        state = state.unsqueeze(0)
+    if state.shape[1] > target_dim:
+        raise ValueError(f"State dimension {state.shape[1]} exceeds expected {target_dim}")
+    if state.shape[1] < target_dim:
+        padding = torch.zeros((state.shape[0], target_dim - state.shape[1]), device=state.device)
+        state = torch.cat([state, padding], dim=1)
+    return state
 
 
 def infer_from_json_dict(data: dict, model, normalizer):
-    device = "cuda"
-    model_dtype = next(model.parameters()).dtype
+    device = next(model.parameters()).device
 
-  
-    images = [decode_image_from_list(img) for img in data["image"]]
-    assert len(images) == 3, "Must provide exactly 3 images."
+    images = [decode_image_from_list(img, device) for img in data["image"]]
+    assert len(images) == MAX_VIEWS, f"Must provide exactly {MAX_VIEWS} images."
     for img in images:
-        assert img.shape == (3, 448, 448), "image_size must be (3,448,448)"
+        assert img.shape == (3, IMAGE_SIZE, IMAGE_SIZE), f"image_size must be (3,{IMAGE_SIZE},{IMAGE_SIZE})"
 
- 
     state = torch.tensor(data["state"], dtype=torch.float32, device=device)
-    if state.ndim == 1:
-        state = state.unsqueeze(0)
-    if state.shape[1] < 24:
-        state = torch.cat([state, torch.zeros((1, 24 - state.shape[1]), device=device)], dim=1)
-    norm_state = normalizer.normalize_state(state).to(dtype=torch.float32)
+    norm_state = normalizer.normalize_state(pad_state_tensor(state)).to(dtype=torch.float32)
 
-    
-    prompt = data["prompt"]
-    image_mask = torch.tensor(data["image_mask"], dtype=torch.int32, device=device)
-    action_mask = torch.tensor([data["action_mask"]],dtype=torch.int32, device=device)
+    prompt = data.get("prompt", "")
+    image_mask = torch.tensor(normalize_mask(data["image_mask"], MAX_VIEWS), dtype=torch.int32, device=device)
+    action_mask = torch.tensor(
+        [normalize_mask(data["action_mask"], TARGET_STATE_DIM)],
+        dtype=torch.int32,
+        device=device,
+    )
 
-    print(f"image_mask,{image_mask}")
-    print(f"action_mask,{action_mask}")
-    
     with torch.no_grad() and torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
         action = model.run_inference(
             images=images,
             image_mask=image_mask,
             prompt=prompt,
             state_input=norm_state,
-            action_mask=action_mask
+            action_mask=action_mask,
         )
-        action = action.reshape(1, -1, 24)
+        action = action.reshape(1, -1, TARGET_STATE_DIM)
         action = normalizer.denormalize_action(action[0])
         return action.cpu().numpy().tolist()
 
 
 async def handle_request(websocket, model, normalizer):
-    print("Client connected")
+    logging.info("Client connected")
     try:
         async for message in websocket:
-           
             json_data = json.loads(message)
-            print(f"Received JSON observation")
+            logging.info("Received JSON observation")
             actions = infer_from_json_dict(json_data, model, normalizer)
             await websocket.send(json.dumps(actions))
-            print("Sent action chunk")
-
-
+            logging.info("Sent action chunk")
     except websockets.exceptions.ConnectionClosed:
-        print("Client disconnected.")
- 
+        logging.info("Client disconnected.")
 
-# === 启动服务 ===
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run the Evo-1 websocket inference server.")
+    parser.add_argument("--ckpt_dir", required=True, help="Checkpoint directory containing config.json and weights.")
+    parser.add_argument("--host", default=DEFAULT_SERVER_HOST)
+    parser.add_argument("--port", type=int, default=DEFAULT_SERVER_PORT)
+    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--inference_steps", type=int, default=32)
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    ckpt_dir = "Your/Path/To/Checkpoint"
-    #Example: ckpt_dir = "/home/dell/checkpoints/Evo1/Evo1_MetaWorld/"
+    args = parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-    port = 9000
-
-    print("Loading EVO_1 model...")
-    model, normalizer = load_model_and_normalizer(ckpt_dir)
+    logging.info("Loading EVO_1 model...")
+    model, normalizer = load_model_and_normalizer(
+        ckpt_dir=args.ckpt_dir,
+        device=args.device,
+        inference_steps=args.inference_steps,
+    )
 
     async def main():
-        print(f"EVO_1 server running at ws://0.0.0.0:{port}")
+        logging.info(f"EVO_1 server running at ws://{args.host}:{args.port}")
         async with websockets.serve(
             lambda ws: handle_request(ws, model, normalizer),
-            "0.0.0.0", port, max_size=100_000_000
+            args.host,
+            args.port,
+            max_size=DEFAULT_MAX_MESSAGE_SIZE,
         ):
             await asyncio.Future()
 

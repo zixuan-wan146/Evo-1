@@ -5,7 +5,14 @@ __pycache__/
 wandb/
 **/.ipynb_checkpoints/
 pretraining_data_cache/
+training_data_cache/
 logs/
 checkpoints/
 Evo1_training_dataset/
 LIBERO/
+MetaWorld_evaluation/logs/
+MetaWorld_evaluation/inspect_frames/
+MetaWorld_evaluation/episode_videos/
+LIBERO_evaluation/log_file/
+LIBERO_evaluation/video_log_file/
+LIBERO_evaluation/videos*/

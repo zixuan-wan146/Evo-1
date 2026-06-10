@@ -1,8 +1,6 @@
 import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import logging
 
 class SinusoidalPositionalEncoding(nn.Module):
     def __init__(self, dim: int, max_len: int = 1000):
@@ -175,7 +173,6 @@ class FlowmatchingActionHead(nn.Module):
                                           num_heads=num_heads, num_layers=num_layers,
                                           dropout=dropout, num_inference_timesteps=num_inference_timesteps,
                                           num_categories=num_categories)
-        print(f"num_inference_timesteps {num_inference_timesteps}")
         self.embed_dim = embed_dim
         self.horizon = horizon
         self.per_action_dim = config.per_action_dim
@@ -219,12 +216,22 @@ class FlowmatchingActionHead(nn.Module):
                                                                horizon=horizon,
                                                                num_categories=num_categories)
 
-    def forward(self, fused_tokens: torch.Tensor, state: torch.Tensor = None,
-                actions_gt: torch.Tensor = None, embodiment_id: torch.LongTensor = None, 
-                state_mask: torch.Tensor = None, action_mask: torch.Tensor = None):
+    def forward(
+        self,
+        fused_tokens: torch.Tensor,
+        state: torch.Tensor = None,
+        actions_gt: torch.Tensor = None,
+        embodiment_id: torch.LongTensor = None,
+        action_mask: torch.Tensor = None,
+    ):
 
         if actions_gt is None:
-            return self.get_action(fused_tokens, state=state, embodiment_id=embodiment_id)
+            return self.get_action(
+                fused_tokens,
+                state=state,
+                embodiment_id=embodiment_id,
+                action_mask=action_mask,
+            )
         B = fused_tokens.size(0)
         device = fused_tokens.device
 
@@ -247,9 +254,6 @@ class FlowmatchingActionHead(nn.Module):
         time_index = (t * 1000).long()  
         time_emb = self.time_pos_enc(1000)[:, time_index, :].squeeze(0) 
     
-        action_shape = actions_gt.shape[1]  
-    
-
         actions_gt_seq = actions_gt  
 
 
@@ -305,10 +309,6 @@ class FlowmatchingActionHead(nn.Module):
         return pred_velocity, noise
 
     def get_action(self, fused_tokens: torch.Tensor, state: torch.Tensor = None, embodiment_id: torch.LongTensor = None, action_mask: torch.Tensor = None):
-
-        print(f"action_mask shape: {action_mask.shape if action_mask is not None else 'None'}")
-        print(f"one sample action_mask: {action_mask[0] if action_mask is not None else 'None'}")
-
         B = fused_tokens.size(0)
         device = fused_tokens.device
         if embodiment_id is None:
@@ -331,8 +331,6 @@ class FlowmatchingActionHead(nn.Module):
             per_action_dim = action_dim_total
 
         action = (torch.rand(B, action_dim_total, device=device) * 2 - 1)
-        print(f"action shape: {action.shape}")
-        print(f"one sample action: {action[0]}")
 
         if self.horizon > 1:
             action_seq = action.view(B, self.horizon, per_action_dim)
@@ -340,19 +338,15 @@ class FlowmatchingActionHead(nn.Module):
         else:
             action_seq = action.view(B, 1, per_action_dim)
 
-        action_mask = action_mask.view(B, 1, per_action_dim).repeat(1,self.horizon,1)
-
-        print(f"action_mask: {action_mask}")
-        print(f"one sample action_mask: {action_mask[0]}")
-
-        if action_mask is not None:
-            action_mask = action_mask.to(dtype=action_seq.dtype, device=action_seq.device)
-            assert action_mask.shape == action_seq.shape, f"action_mask shape {action_mask.shape} != noise shape {action_seq.shape}"
-            action_seq = action_seq * action_mask
-        else:
+        if action_mask is None:
             raise ValueError("action_mask must be provided for inference with flow matching.")
-        print(f"action shape: {action_seq.shape}")
-        print(f"one sample action: {action_seq[0]}")
+
+        action_mask = action_mask.to(dtype=action_seq.dtype, device=action_seq.device)
+        if action_mask.shape == (B, per_action_dim):
+            action_mask = action_mask.view(B, 1, per_action_dim).repeat(1, self.horizon, 1)
+        elif action_mask.shape != action_seq.shape:
+            raise ValueError(f"action_mask shape {action_mask.shape} != action sequence shape {action_seq.shape}")
+        action_seq = action_seq * action_mask
 
         N = int(getattr(self.config, "num_inference_timesteps", 32))
         dt = 1.0 / N
@@ -412,4 +406,3 @@ class FlowmatchingActionHead(nn.Module):
     def dtype(self):
         
         return next(self.parameters()).dtype
-

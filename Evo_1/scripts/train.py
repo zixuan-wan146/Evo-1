@@ -1,9 +1,12 @@
 import sys
 import os
 import math
-from torch import amp
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-import time
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import wandb
 import swanlab
 import torch
@@ -11,10 +14,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch.optim.lr_scheduler import LambdaLR
-from Evo1 import EVO1
-from accelerate import Accelerator 
+from model.evo1 import EVO1
 import logging
-from datetime import datetime
 import argparse
 from accelerate import Accelerator, DistributedType
 import json
@@ -71,7 +72,6 @@ def custom_collate_fn(batch):
     actions = torch.stack([item["action"] for item in batch], dim=0)
     action_mask = torch.stack([item["action_mask"] for item in batch], dim=0)
     image_masks = torch.stack([item["image_mask"] for item in batch], dim=0)
-    state_mask = torch.stack([item["state_mask"] for item in batch], dim=0)
     embodiment_ids = torch.stack([item["embodiment_id"] for item in batch], dim=0)
 
     return {
@@ -80,7 +80,6 @@ def custom_collate_fn(batch):
         "states": states,
         "actions": actions,
         "action_mask": action_mask,
-        "state_mask": state_mask,
         "image_masks": image_masks,
         "embodiment_ids": embodiment_ids
     }
@@ -96,7 +95,6 @@ def get_lr_lambda(warmup_steps, total_steps, resume_step=0):
     
 def setup_logging(log_dir: str) -> str:
     from datetime import datetime
-    import logging, os
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     os.makedirs(log_dir, exist_ok=True)
@@ -140,30 +138,33 @@ def init_swanlab(config: dict, accelerator: Accelerator):
         )
 
 def prepare_dataset(config: dict) -> torch.utils.data.Dataset:
-    dataset_type = get_with_warning(config, "dataset_type", "lerobot")
+    dataset_type = get_with_warning(config, "dataset_type", "simulation")
     image_size = get_with_warning(config, "image_size", 448)
     max_samples = get_with_warning(config, "max_samples_per_file", None)
     horizon = get_with_warning(config, "horizon", 50)
     binarize_gripper = get_with_warning(config, "binarize_gripper", False)
     use_augmentation = get_with_warning(config, "use_augmentation", False)
-    if dataset_type == "lerobot":
-        from dataset.lerobot_dataset_pretrain_mp import LeRobotDataset 
+    if dataset_type == "simulation":
         import yaml
+
+        from dataset.simulation_dataset import SimulationDataset
+
         with open(config.get("dataset_config_path"), 'r') as f:
             dataset_config = yaml.safe_load(f)
 
-        dataset = LeRobotDataset(
+        dataset = SimulationDataset(
             config=dataset_config,
             image_size=image_size,
             max_samples_per_file=max_samples,
             action_horizon=horizon,
             binarize_gripper=binarize_gripper,
+            cache_dir=config.get("cache_dir"),
             use_augmentation=use_augmentation
         )
     else:
         raise ValueError(f"Unknown dataset_type: {dataset_type}")
     if accelerator is None or accelerator.is_main_process:
-        logging.info(f"Loaded {len(dataset)} samples from {config['data_paths']} ({dataset_type})")
+        logging.info(f"Loaded {len(dataset)} samples using {config.get('dataset_config_path')} ({dataset_type})")
     return dataset
 
 
@@ -330,7 +331,7 @@ def train(config):
 
     # === Set logging ===
     save_dir = get_with_warning(config, "save_dir", "checkpoints")
-    log_path = setup_logging(save_dir)
+    setup_logging(save_dir)
     
     # === WandB and Swanlab ===
     init_wandb(config, accelerator)
@@ -374,7 +375,6 @@ def train(config):
 
     # === Checkpoint and save path setup ===
     os.makedirs(save_dir, exist_ok=True)
-    best_ckpt_path = os.path.join(save_dir, "best_checkpoint.pt")
     best_loss = float("inf")
     
     # === Logging and interval settings ===
@@ -436,7 +436,6 @@ def train(config):
             states = batch["states"].to(dtype=torch.bfloat16)
             actions_gt = batch["actions"].to(dtype=torch.bfloat16)
             action_mask = batch["action_mask"]
-            state_mask = batch["state_mask"]
             embodiment_ids = batch["embodiment_ids"]
             fused_tokens_list = []
             
@@ -506,7 +505,8 @@ def train(config):
                 torch.distributed.broadcast(is_best_tensor, src=0)
             
             if is_best_tensor.item() == 1 and step > 1000:
-                accelerator.print("start to save best checkpoint")
+                if accelerator.is_main_process:
+                    logging.info("Saving best checkpoint")
                 save_checkpoint(
                     save_dir,
                     step="best",
@@ -516,7 +516,6 @@ def train(config):
                     config=config,
                     norm_stats=dataset.arm2stats_dict 
                 )
-                accelerator.print("end to save best checkpoint")
                 if accelerator.is_main_process:
                     logging.info(f"Saved best checkpoint at step {step} with loss {loss_value:.6f}")
 
@@ -524,7 +523,6 @@ def train(config):
 
             # === Save periodic checkpoint ===
             if step % ckpt_interval == 0 and step > 0:
-                checkpoint_path = os.path.join(save_dir, f"checkpoint_step_{step}.pt")
                 save_checkpoint(save_dir, step=step, model_engine=model_engine, loss=loss, accelerator=accelerator, config=config, norm_stats=dataset.arm2stats_dict)
          
     # === Save final model ===
@@ -546,9 +544,9 @@ if __name__ == "__main__":
     parser.add_argument("--disable_wandb", action="store_true", help="Disable wandb logging.")
 
     # Dataset
-    parser.add_argument("--dataset_type", type=str, default="lerobot")
-    parser.add_argument("--data_paths", type=str, required=False)
+    parser.add_argument("--dataset_type", type=str, default="simulation")
     parser.add_argument("--dataset_config_path", type=str, required=True)
+    parser.add_argument("--cache_dir", type=str, default=None)
     parser.add_argument("--image_size", type=int, default=448)
     parser.add_argument("--binarize_gripper", action="store_true", default=False, help="Whether to binarize gripper state/action (default: False).")
     parser.add_argument("--use_augmentation", action="store_true", help="Enable data augmentation on images")
@@ -595,4 +593,3 @@ if __name__ == "__main__":
         if accelerator.is_main_process:
             logging.info("KeyboardInterrupt received. Cleaning up...")
         sys.exit(0)
-

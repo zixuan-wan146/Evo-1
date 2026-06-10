@@ -1,17 +1,14 @@
-# model/internvl3/internvl3_embedder.py
+import logging
+from typing import List, Union
+
 import torch
 from PIL import Image
-import torch
 import torch.nn as nn
 import torchvision.transforms as T
-import torchvision.transforms.functional as TF
 from torchvision.transforms.functional import InterpolationMode
 from transformers import AutoModel, AutoTokenizer
-from transformers import GenerationConfig
 from torchvision.transforms.functional import to_pil_image
-from typing import Union, List
-from torch import nn
-import logging
+
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
@@ -155,12 +152,12 @@ class InternVL3Embedder(nn.Module):
         true_sequence_length = untruncated_ids.shape[1]
 
         if true_sequence_length > self.max_text_length:
-            print("\n" + "="*80)
-            print(f" WARNING: Input prompt was TRUNCATED!")
-            print(f"   - Max Length Allowed    : {self.max_text_length}")
-            print(f"   - Actual Length      : {true_sequence_length}")
-            print(f"   - Truncated Prompt (first 100 chars): '{prompt[:100]}...'")
-            print("="*80 + "\n")
+            logging.warning(
+                "Input prompt was truncated: max_length=%s, actual_length=%s, prompt_prefix=%r",
+                self.max_text_length,
+                true_sequence_length,
+                prompt[:100],
+            )
 
         model_inputs = self.tokenizer(prompt, return_tensors="pt", padding='max_length', truncation=True, max_length=self.max_text_length).to(self.device)
         input_ids = model_inputs["input_ids"]
@@ -183,21 +180,20 @@ class InternVL3Embedder(nn.Module):
             
         try:
             input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds.reshape(-1, C)
-            ignore_flag = False
         except Exception as e:
             vit_embeds = vit_embeds.reshape(-1, C)
-            print(f'warning: {e}, input_embeds[selected].shape={input_embeds[selected].shape}, '
-                  f'vit_embeds.shape={vit_embeds.shape}')
+            logging.warning(
+                "Image/text embedding alignment fallback: %s, selected_shape=%s, vit_shape=%s",
+                e,
+                input_embeds[selected].shape,
+                vit_embeds.shape,
+            )
             n_token = selected.sum()
             input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds[:n_token]
-            ignore_flag = True
 
  
         tokens_per_tile = self.model.num_image_token 
  
-        torch.set_printoptions(profile="full", threshold=float('inf'))
-   
-        torch.set_printoptions(profile="default")
         current_token_idx = 0
         for i in range(len(image_mask)):
            
@@ -214,10 +210,6 @@ class InternVL3Embedder(nn.Module):
             current_token_idx += num_tokens_for_this_image
 
         input_embeds = input_embeds.reshape(B, N, C)
-    
-        torch.set_printoptions(profile="full", threshold=float('inf'))
-     
-        torch.set_printoptions(profile="default")
         return input_embeds, attention_mask
 
 
@@ -234,8 +226,7 @@ class InternVL3Embedder(nn.Module):
 
        
         if pixel_values.shape[0] == 0:
-           
-            print("Warning: No valid images to process after masking.")
+            logging.warning("No valid images to process after masking.")
 
         vit_embeds = self.model.extract_feature(pixel_values)
         fused_embeds = vit_embeds  
