@@ -65,3 +65,18 @@ def test_run_libero_eval_script_preserves_explicit_overrides():
     assert env["EVO1_LIBERO_MAX_STEPS"] == "3"
     assert env["EVO1_LIBERO_CKPT_NAME"] == "custom_eval"
     assert env["EVO1_LIBERO_RESULT_FILE"].endswith("custom_eval_results.json")
+
+
+def test_run_libero_eval_script_can_group_outputs_under_run_dir(tmp_path):
+    run_dir = tmp_path / "libero_eval_run"
+    result = run_eval_script({"EVO1_LIBERO_RUN_DIR": str(run_dir)})
+
+    assert result.returncode == 0
+    env = parse_env_output(result.stdout)
+    assert env["EVO1_LIBERO_RUN_DIR"] == str(run_dir)
+    assert env["EVO1_LIBERO_LOG_DIR"] == str(run_dir / "logs")
+    assert env["EVO1_LIBERO_VIDEO_DIR"] == str(run_dir / "videos")
+    assert env["EVO1_LIBERO_LOG_FILE"] == str(run_dir / "logs" / "Evo1_libero_eval.txt")
+    assert env["EVO1_LIBERO_RESULT_FILE"] == str(
+        run_dir / "results" / "Evo1_libero_eval_results.json"
+    )
