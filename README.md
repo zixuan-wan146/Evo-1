@@ -245,6 +245,20 @@ python scripts/summarize_libero_results.py /root/autodl-tmp/evo1_runs \
 The run inventory table reports each run directory, completeness status, manifest settings, result
 path, Git metadata, and overall success metrics when a result JSON exists.
 
+To gate a candidate result before treating it as an improvement:
+
+```bash
+python scripts/check_libero_metrics.py /root/autodl-tmp/evo1_runs/candidate \
+  --min-success-rate 0.10 \
+  --min-total-episodes 10
+python scripts/check_libero_metrics.py /root/autodl-tmp/evo1_runs/candidate \
+  --baseline /root/autodl-tmp/evo1_runs/baseline \
+  --max-regression 0.02
+```
+
+The metric gate defaults to the `overall` scope. Add `--scope suite:libero_spatial` or repeat
+`--scope` to gate suite-level metrics.
+
 For headless smoke tests, `EVO1_MUJOCO_GL=osmesa` is the more stable default. Use
 `EVO1_MUJOCO_GL=egl` on GPU servers when EGL cleanup warnings are acceptable and
 faster rendering is preferred.
