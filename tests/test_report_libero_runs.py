@@ -85,7 +85,11 @@ def test_write_report_creates_inventory_summary_and_manifest(tmp_path: Path):
     assert report["result_file_count"] == 1
     assert (output_dir / "run_inventory.md").exists()
     assert (output_dir / "result_summary.csv").exists()
+    assert (output_dir / "README.md").exists()
     assert (output_dir / "report_manifest.json").exists()
+    readme = (output_dir / "README.md").read_text()
+    assert "# LIBERO Run Report" in readme
+    assert "`report_manifest.json`" in readme
     csv_rows = list(csv.DictReader((output_dir / "result_summary.csv").open()))
     assert csv_rows[0]["run_name"] == "run"
     assert csv_rows[0]["success_rate"] == "0.7"
@@ -131,3 +135,4 @@ def test_main_returns_failure_when_metric_gate_fails(tmp_path: Path):
     assert result.returncode == 1
     assert "below minimum" in result.stderr
     assert (output_dir / "metrics_gate.txt").exists()
+    assert "below minimum" in (output_dir / "README.md").read_text()

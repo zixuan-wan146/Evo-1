@@ -14,9 +14,9 @@
   - `User root`
   - `IdentityFile /home/myser/.ssh/id_ed25519_autodl`
 - GitHub 推送状态：
-  - 本地提交已完成，但本地 `main` 仍领先 `origin/main` 34 个提交。
-  - 最新本地提交主题：`Report LIBERO runs`。
-  - 最新未推送补丁包：`exports/unpushed_commits_20260610T190800Z`。
+  - 本地提交已完成，但本地 `main` 仍领先 `origin/main` 35 个提交。
+  - 最新本地提交主题：`Index LIBERO reports`。
+  - 最新未推送补丁包：`exports/unpushed_commits_20260610T191200Z`。
   - `git push origin main` 失败，原因是当前凭据 `myserendipity137` 没有 `zixuan-wan146/Evo-1.git` 写权限。
   - 需要给该账号写权限，或提供有权限的新 remote。
 - 服务器状态：
@@ -63,6 +63,7 @@
 - `Summarize LIBERO run inventories`（本轮新增，汇总 run 目录完整性、manifest 设置和 overall 指标）
 - `Gate LIBERO metrics`（本轮新增，用 success rate、episode count 和 baseline regression 检查复现/改进结果）
 - `Report LIBERO runs`（本轮新增，一键生成 run inventory、result summary 和 metric gate 报告目录）
+- `Index LIBERO reports`（本轮新增，报告目录生成可交接 README 索引）
 
 服务器对应提交：
 
@@ -72,7 +73,7 @@
 - `Complete LIBERO remote smoke setup`（服务器本轮新增，内容与本地等价）
 
 服务器提交哈希不同是因为通过 `git format-patch | git am` 应用，内容等价但提交对象不同。
-最新一次 `git push origin main` 在提交 `Report LIBERO runs` 后仍失败：当前 GitHub 凭据 `myserendipity137` 对 `zixuan-wan146/Evo-1.git` 没有写权限。
+最新一次 `git push origin main` 在提交 `Index LIBERO reports` 后仍失败：当前 GitHub 凭据 `myserendipity137` 对 `zixuan-wan146/Evo-1.git` 没有写权限。
 
 ## 已完成的工程改造
 
@@ -196,7 +197,7 @@
 - 新增 LIBERO result JSON 中运行元数据和汇总表 git 列的说明。
 - 新增 LIBERO run inventory 汇总说明，可盘点完整 run 和只有 manifest 的中断 run。
 - 新增 LIBERO metric gate 说明，可用绝对阈值和 baseline 回归容忍度检查候选结果。
-- 新增 LIBERO run report 说明，可一键生成 inventory、summary、manifest 和 metric gate 日志。
+- 新增 LIBERO run report 说明，可一键生成 inventory、summary、README、manifest 和 metric gate 日志。
 - 新增用 `scripts/preflight.py --libero-result` 校验评估结果文件的说明。
 - 新增 LIBERO result 校验会比较 overall/per-suite summary 与 episode 明细一致性的说明。
 - 新增用 `scripts/preflight.py --libero-manifest` 校验 LIBERO run manifest 的说明。
@@ -288,8 +289,9 @@
   - 支持重复 `--scope` 检查 overall 或 suite 级指标。
 - 新增 `scripts/report_libero_runs.py`
   - 支持输入 run 目录、result 目录、result JSON 或 glob。
-  - 输出 `run_inventory.md/csv`、`result_summary.md/csv` 和 `report_manifest.json`。
+  - 输出 `run_inventory.md/csv`、`result_summary.md/csv`、`README.md` 和 `report_manifest.json`。
   - 支持复用 metric gate 选项写出 `metrics_gate.txt`，失败时返回非零退出码。
+  - `README.md` 会记录输入数量、生成文件、metric gate 状态和失败原因，便于报告目录单独交接。
 - CI 新增 shell 脚本语法检查、`scripts/preflight.py` 和 `compileall scripts`。
 
 ## 服务器部署状态
@@ -376,6 +378,7 @@ scripts/check_repo.sh
 - `python3 scripts/summarize_libero_results.py /tmp/evo1_run_dir_check --table runs`：通过，能输出 run inventory 表
 - `python3 scripts/check_libero_metrics.py /tmp/evo1_run_dir_check --min-success-rate 0 --min-total-episodes 1`：通过，能执行 LIBERO 指标门槛检查
 - `python3 scripts/report_libero_runs.py /tmp/evo1_run_dir_check --output-dir /tmp/evo1_report_check --min-success-rate 0 --min-total-episodes 1`：通过，能生成 LIBERO run 报告目录
+- `python3 scripts/report_libero_runs.py /tmp/evo1_run_dir_check --output-dir /tmp/evo1_report_check_readme --min-success-rate 0 --min-total-episodes 1`：通过，报告目录包含可读 `README.md`
 - `compileall`：通过
 - `git diff --check`：通过
 - `python3 -m ruff check .`：本地 Python 环境未安装 `ruff`；`scripts/check_repo.sh` 已按本地默认策略 WARN 后跳过，CI 会强制要求 `ruff`

@@ -268,8 +268,9 @@ python scripts/report_libero_runs.py /root/autodl-tmp/evo1_runs \
   --min-total-episodes 10
 ```
 
-The report directory contains run inventory tables, result summary tables, a report manifest, and a
-metric gate log when gate options are provided.
+The report directory contains run inventory tables, result summary tables, a human-readable
+`README.md`, a machine-readable report manifest, and a metric gate log when gate options are
+provided.
 
 For headless smoke tests, `EVO1_MUJOCO_GL=osmesa` is the more stable default. Use
 `EVO1_MUJOCO_GL=egl` on GPU servers when EGL cleanup warnings are acceptable and

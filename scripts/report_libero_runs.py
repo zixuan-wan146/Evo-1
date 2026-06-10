@@ -118,6 +118,21 @@ def write_report(
         gate_path.write_text(_format_gate(gate))
         files.append(str(gate_path))
 
+    readme_path = output_dir / "README.md"
+    manifest_path = output_dir / "report_manifest.json"
+    files.append(
+        str(
+            _write_report_readme(
+                readme_path,
+                input_count=len(input_list),
+                run_dir_count=len(run_dirs),
+                result_file_count=len(result_files),
+                generated_files=[*files, str(manifest_path)],
+                gate=gate,
+            )
+        )
+    )
+
     manifest = {
         "input_count": len(input_list),
         "run_dir_count": len(run_dirs),
@@ -125,7 +140,6 @@ def write_report(
         "files": files,
         "metrics_gate": gate,
     }
-    manifest_path = output_dir / "report_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     files.append(str(manifest_path))
     manifest["files"] = files
@@ -197,6 +211,48 @@ def _format_gate(gate: Mapping[str, Any]) -> str:
         lines.append("failures:")
         lines.extend(f"- {failure}" for failure in failures)
     return "\n".join(lines) + "\n"
+
+
+def _write_report_readme(
+    path: Path,
+    *,
+    input_count: int,
+    run_dir_count: int,
+    result_file_count: int,
+    generated_files: list[str],
+    gate: Mapping[str, Any],
+) -> Path:
+    lines = [
+        "# LIBERO Run Report",
+        "",
+        "## Inputs",
+        "",
+        f"- Input patterns: {input_count}",
+        f"- Run directories: {run_dir_count}",
+        f"- Result files: {result_file_count}",
+        "",
+        "## Generated Files",
+        "",
+    ]
+    lines.extend(f"- `{Path(file_path).name}`" for file_path in generated_files)
+    lines.extend(
+        [
+            "",
+            "## Metric Gate",
+            "",
+            f"- Enabled: {gate['enabled']}",
+            f"- Passed: {gate['passed']}",
+        ]
+    )
+    scopes = gate.get("scopes", [])
+    if scopes:
+        lines.append(f"- Scopes: {', '.join(str(scope) for scope in scopes)}")
+    failures = gate.get("failures", [])
+    if failures:
+        lines.extend(["", "Failures:"])
+        lines.extend(f"- {failure}" for failure in failures)
+    path.write_text("\n".join(lines) + "\n")
+    return path
 
 
 def _rate(value: str) -> float:
