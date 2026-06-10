@@ -93,6 +93,7 @@
   - 将 `MUJOCO_GL` 设置提前到 LIBERO/robosuite 导入前。
   - 默认使用 `osmesa` headless 渲染，可通过 `EVO1_MUJOCO_GL=egl` 切换到 EGL。
   - 将环境变量解析抽到 `LIBERO_evaluation/libero_client_config.py`，可在无 LIBERO/robosuite 的本地环境中测试。
+  - 将 websocket action 响应解析抽到 `LIBERO_evaluation/libero_action_protocol.py`，显式校验服务端 error、horizon 和动作维度。
   - 客户端默认地址从 `ws://0.0.0.0:9000` 修正为 `ws://127.0.0.1:9000`。
   - 支持单值 `EVO1_LIBERO_MAX_STEPS` 自动扩展到多个 task suite。
   - 新增 `EVO1_LIBERO_TASK_LIMIT`，用于轻量 smoke 测试只跑前 N 个 task。

@@ -17,6 +17,7 @@ REQUIRED_REPO_FILES = (
     "Evo_1/scripts/Evo1_server.py",
     "Evo_1/scripts/train.py",
     "Evo_1/dataset/config.yaml",
+    "LIBERO_evaluation/libero_action_protocol.py",
     "LIBERO_evaluation/libero_client_config.py",
     "LIBERO_evaluation/libero_client_4tasks.py",
     "scripts/preflight.py",

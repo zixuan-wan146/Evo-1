@@ -11,6 +11,7 @@ import math
 import imageio
 import random
 
+from libero_action_protocol import parse_action_response, to_libero_action
 from libero_client_config import LiberoClientConfig, configure_mujoco_environment
 
 args = LiberoClientConfig.from_env()
@@ -156,27 +157,19 @@ async def run(SERVER_URL: str, max_steps: int = None, num_episodes: int = None, 
 
                     result = await ws.recv()
                     try:
-                        action_list = json.loads(result)
-                        actions = np.array(action_list)
+                        actions = parse_action_response(result, horizon=horizon)
                         log.debug(f"[Step {step}] received actions (gripper={actions[0][6]})")
                     except Exception as e:
                         log.error(f"Action parsing failed: {e}, content: {result}")
                         break
 
                     
-                    for i in range(horizon):
-                        action = actions[i].tolist()
+                    for action_values in actions:
+                        action = to_libero_action(action_values)
                         log.debug(action[:7])
-                        if action[6]>0.5:
-                            action[6] = -1
-                        else:
-                            action[6] = 1
-                        
-                        # action[6] = abs(1.0 - action[6])
-                        
                         log.debug(f"gripper action {action[6]}")
                         try:
-                            obs, reward, done, info = env.step(action[:7])
+                            obs, reward, done, info = env.step(action)
                         except ValueError as ve:
                             log.error(f"Action is not valid: {ve}")
                             episode_done = False
