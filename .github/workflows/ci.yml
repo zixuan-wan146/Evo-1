@@ -22,5 +22,7 @@ jobs:
         run: python -m ruff check .
       - name: Check shell scripts
         run: find scripts -name "*.sh" -print0 | xargs -0 bash -n
+      - name: Run repository preflight
+        run: python scripts/preflight.py
       - name: Compile Python sources
-        run: python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation
+        run: python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation scripts

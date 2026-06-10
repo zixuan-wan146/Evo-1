@@ -47,7 +47,8 @@ Install the lightweight development dependencies from the repository root:
 pip install -r requirements-dev.txt
 python -m pytest
 find scripts -name "*.sh" -print0 | xargs -0 bash -n
-python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation tests
+python scripts/preflight.py
+python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation scripts tests
 ```
 
 The lightweight tests avoid downloading model weights. Tests that require PyTorch are skipped when
@@ -149,6 +150,16 @@ LIBERO_PYTHON=/root/autodl-tmp/envs/libero/bin/python scripts/run_libero_smoke.s
 For headless smoke tests, `EVO1_MUJOCO_GL=osmesa` is the more stable default. Use
 `EVO1_MUJOCO_GL=egl` on GPU servers when EGL cleanup warnings are acceptable and
 faster rendering is preferred.
+
+Before running a longer evaluation, use the lightweight preflight checks:
+
+```bash
+python scripts/preflight.py \
+  --checkpoint /path/to/checkpoint \
+  --check-imports evo1
+```
+
+For a strict training-data check, add `--strict-data` after downloading the dataset.
 
 ## Training
 

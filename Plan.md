@@ -132,6 +132,11 @@
 
 ### 复现脚本
 
+- 新增 `scripts/preflight.py`
+  - 默认检查仓库关键文件、脚本执行权限、shell 脚本语法和数据配置结构。
+  - 可选检查 checkpoint 目录：`--checkpoint /path/to/Evo1_LIBERO`。
+  - 可选检查运行时依赖：`--check-imports evo1|libero|all`。
+  - 可选严格检查数据文件：`--strict-data`。
 - 新增 `scripts/setup_libero_env.sh`
   - 创建/复用 LIBERO Python 3.8.13 conda prefix env。
   - 安装 `libero==0.1.1`、`websockets`、`imageio`。
@@ -145,7 +150,7 @@
 - 新增 `scripts/run_libero_smoke.sh`
   - 固化 1 task / 1 episode / 1 step 的 LIBERO smoke 默认配置。
   - 支持通过环境变量扩展到更长 eval。
-- CI 新增 shell 脚本语法检查：`find scripts -name "*.sh" -print0 | xargs -0 bash -n`。
+- CI 新增 shell 脚本语法检查、`scripts/preflight.py` 和 `compileall scripts`。
 
 ## 服务器部署状态
 
