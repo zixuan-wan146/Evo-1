@@ -47,12 +47,18 @@ Install the lightweight development dependencies from the repository root:
 pip install -r requirements-dev.txt
 python -m pytest
 find scripts -name "*.sh" -print0 | xargs -0 bash -n
+python scripts/audit_requirements.py
 python scripts/preflight.py
 python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation scripts tests
 ```
 
 The lightweight tests avoid downloading model weights. Tests that require PyTorch are skipped when
 PyTorch is not installed.
+
+`scripts/audit_requirements.py` fails when a new `requirements*.txt` file is not covered by
+`requirements-policy.json`, or when a dependency is left unpinned without an explicit reason.
+Existing unpinned Evo-1 runtime dependencies are recorded as known follow-up work until the exact
+GPU server wheel set is captured.
 
 If the GitHub remote is temporarily unavailable or your account lacks write permission, export the
 local commits as a portable patch bundle:

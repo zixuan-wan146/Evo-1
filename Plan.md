@@ -50,6 +50,7 @@
 - `Add full LIBERO eval launcher`（本轮新增，将正式 eval 入口与 smoke 入口分离）
 - `Export unpushed commits as patches`（本轮新增，GitHub 权限阻塞时导出可迁移 patch bundle）
 - `Pin LIBERO environment entrypoints`（本轮新增，固定 LIBERO 评估环境顶层依赖并加入 setup dry-run）
+- `Audit requirements drift`（本轮新增，新增 requirements 策略审计，防止未登记浮动依赖继续扩散）
 
 服务器对应提交：
 
@@ -188,6 +189,7 @@
 - 新增 `scripts/run_libero_eval.sh` 正式 LIBERO eval 入口和 dry-run 说明。
 - 新增 `requirements-libero.txt`，记录 LIBERO 评估环境顶层依赖入口，避免和 Evo1 主环境混用。
 - 新增 `scripts/setup_libero_env.sh` dry-run 说明，可在不创建 conda 环境、不下载 assets 的情况下检查路径解析。
+- 新增 `requirements-policy.json` 和 `scripts/audit_requirements.py`，要求新增 requirements 文件和未固定依赖必须登记策略理由。
 - 记录 `HF_HOME`、`HUGGINGFACE_HUB_CACHE`、`PIP_CACHE_DIR`、`TMPDIR` 等数据盘路径建议。
 - 记录 `flash-attn` cross-device link 安装问题的处理方式。
 
@@ -224,6 +226,10 @@
   - 默认输出到 `exports/unpushed_commits_<UTC time>/`。
   - 输出 `patches/*.patch`、`manifest.json` 和应用说明 `README.md`。
   - 适用于当前 GitHub remote 无写权限时，把本地工程化改造迁移到新 remote 或服务器。
+- 新增 `scripts/audit_requirements.py`
+  - 检查仓库内 `requirements*.txt` 是否都被 `requirements-policy.json` 覆盖。
+  - 未固定版本的依赖如果没有策略理由会失败。
+  - 已固定的 LIBERO 依赖保持严格检查；Evo1 主环境当前浮动项以 WARN 暴露并登记为后续锁版本任务。
 - 新增 `scripts/summarize_libero_results.py`
   - 支持输入 result JSON 文件、目录或 glob。
   - 输出 overall 和 per-suite 行。
@@ -295,6 +301,7 @@ shell 启动文件或系统环境，避免拖慢国内资源下载。
 
 ```bash
 python3 -m pytest
+python3 scripts/audit_requirements.py
 python3 scripts/preflight.py
 bash -n scripts/*.sh
 EVO1_SETUP_LIBERO_DRY_RUN=1 scripts/setup_libero_env.sh
@@ -304,7 +311,8 @@ git diff --check
 
 本地结果：
 
-- `pytest`：69 passed, 3 skipped
+- `pytest`：74 passed, 3 skipped
+- `scripts/audit_requirements.py`：通过；当前 Evo1 主环境和 dev 环境的浮动依赖都以 WARN 暴露，并已在 `requirements-policy.json` 登记理由
 - `scripts/preflight.py`：通过；仅提示默认训练数据路径不存在的 WARN（本地未放完整训练数据，非失败）
 - `bash -n scripts/*.sh`：通过
 - `EVO1_SETUP_LIBERO_DRY_RUN=1 scripts/setup_libero_env.sh`：通过，能在不创建 conda 环境、不下载 assets 的情况下打印解析后的路径
@@ -353,7 +361,7 @@ python -m compileall -q Evo_1 MetaWorld_evaluation LIBERO_evaluation tests
 - 尚未跑完整 LIBERO suite eval，目前只跑了 1 task/1 episode/1 step 的 smoke。
 - 最新的 LIBERO result summary JSON 改动只完成了本地单元测试，服务器已关机，尚未在真实 LIBERO 环境上重跑 smoke。
 - 尚未下载训练数据集并跑短步数训练 smoke test。
-- `Evo_1/requirements.txt` 仍有部分浮动依赖，后续可进一步锁定主模型/训练环境版本。
+- `Evo_1/requirements.txt` 仍有部分浮动依赖；目前已由 `requirements-policy.json` 审计和显式登记，后续可根据服务器真实环境进一步锁定主模型/训练环境版本。
 - `flash-attn` 目前按服务器实际环境安装成功，尚未写入主 requirements，避免无 GPU/无匹配 wheel 环境被强绑定。
 
 ## 下一步建议

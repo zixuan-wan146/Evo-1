@@ -27,6 +27,7 @@ from Evo_1.runtime_config import TARGET_STATE_DIM  # noqa: E402
 
 REQUIRED_REPO_FILES = (
     "README.md",
+    "requirements-policy.json",
     "requirements-libero.txt",
     "Evo_1/training_config.py",
     "Evo_1/server_protocol.py",
@@ -39,6 +40,7 @@ REQUIRED_REPO_FILES = (
     "LIBERO_evaluation/libero_eval_summary.py",
     "LIBERO_evaluation/libero_client_4tasks.py",
     "scripts/preflight.py",
+    "scripts/audit_requirements.py",
     "scripts/setup_libero_env.sh",
     "scripts/start_evo1_server.sh",
     "scripts/export_unpushed_commits.sh",

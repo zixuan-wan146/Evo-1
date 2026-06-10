@@ -22,6 +22,8 @@ jobs:
         run: python -m ruff check .
       - name: Check shell scripts
         run: find scripts -name "*.sh" -print0 | xargs -0 bash -n
+      - name: Audit requirements policy
+        run: python scripts/audit_requirements.py
       - name: Run repository preflight
         run: python scripts/preflight.py
       - name: Compile Python sources
