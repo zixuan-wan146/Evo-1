@@ -15,11 +15,10 @@
   - `IdentityFile /home/myser/.ssh/id_ed25519_autodl`
   - 注意：本轮受本地文件沙箱限制，未能直接写入 `/home/myser/.ssh/config`；当前 `ssh -G Evo` 仍解析到旧端口 `53983`，远端检查使用显式 `ssh -p 10623` 完成。
 - GitHub 推送状态：
-  - 本地提交已完成，但本地 `main` 仍领先 `origin/main` 40 个提交。
-  - 最新本地提交主题：`Fix requirements audit lint`。
-  - 最新未推送补丁包：`exports/unpushed_commits_20260610T193247Z`。
-  - `git push origin main` 失败，原因是当前凭据 `myserendipity137` 没有 `zixuan-wan146/Evo-1.git` 写权限。
-  - 需要给该账号写权限，或提供有权限的新 remote。
+  - 已将 `origin` 从 HTTPS 切换为 SSH：`git@github.com:zixuan-wan146/Evo-1.git`。
+  - `ssh -T git@github.com` 已验证当前 SSH key 对应 GitHub 账号 `zixuan-wan146`。
+  - `git push origin main` 已成功，GitHub `main` 已更新到 `0818c5f Update remote sync status`。
+  - 旧 HTTPS 凭据仍可能存在于 VS Code/Git askpass 缓存中，但当前仓库不再使用 HTTPS remote。
 - 服务器状态：
   - 新端口 `10623` 已验证可连接，主机为 `autodl-container-qvadxau6nv-9fa36eab`。
   - 数据盘 `/root/autodl-tmp` 为 50G，当前约 27G 已用、24G 可用；系统盘 `/` 约 30G 可用。
