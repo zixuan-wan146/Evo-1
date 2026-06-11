@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 import re
 import sys
-from typing import Any
 
 
 IGNORED_DISCOVERY_DIRS = {
