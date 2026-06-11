@@ -5,23 +5,29 @@
 ## 当前状态
 
 - 本地仓库：`/home/myser/Project/Evo/Evo-1`
-- 服务器仓库：`Evo:/root/autodl-tmp/Evo-1`
+- 服务器仓库：`root@connect.bjb2.seetacloud.com -p 10623:/root/autodl-tmp/Evo-1`
 - 外层目录 `/home/myser/Project/Evo` 不是有效 Git 仓库，里面的 `.git` 是空目录。
-- 本地已创建 SSH host：
+- 新服务器连接信息：
   - `Host Evo`
   - `HostName connect.bjb2.seetacloud.com`
-  - `Port 53983`
+  - `Port 10623`
   - `User root`
   - `IdentityFile /home/myser/.ssh/id_ed25519_autodl`
+  - 注意：本轮受本地文件沙箱限制，未能直接写入 `/home/myser/.ssh/config`；当前 `ssh -G Evo` 仍解析到旧端口 `53983`，远端检查使用显式 `ssh -p 10623` 完成。
 - GitHub 推送状态：
-  - 本地提交已完成，但本地 `main` 仍领先 `origin/main` 39 个提交。
-  - 最新本地提交主题：`Initialize LIBERO experiments`。
+  - 本地提交已完成，但本地 `main` 仍领先 `origin/main` 40 个提交。
+  - 最新本地提交主题：`Fix requirements audit lint`。
   - 最新未推送补丁包：`exports/unpushed_commits_20260610T193247Z`。
   - `git push origin main` 失败，原因是当前凭据 `myserendipity137` 没有 `zixuan-wan146/Evo-1.git` 写权限。
   - 需要给该账号写权限，或提供有权限的新 remote。
 - 服务器状态：
-  - LIBERO 部署和 smoke 已完成。
-  - 服务器已按要求关机，后续 SSH 检查表现为 connection refused。
+  - 新端口 `10623` 已验证可连接，主机为 `autodl-container-qvadxau6nv-9fa36eab`。
+  - 数据盘 `/root/autodl-tmp` 为 50G，当前约 27G 已用、24G 可用；系统盘 `/` 约 30G 可用。
+  - GPU 为 NVIDIA GeForce RTX 4090 D，显存 24564 MiB，检查时无 Evo/LIBERO 任务占用。
+  - 服务器仓库 `/root/autodl-tmp/Evo-1` 已同步本地后续工程化提交，当前远端 `main` 领先 `origin/main` 40 个提交，最新提交为 `db39868 Fix requirements audit lint`。
+  - checkpoint 目录存在：`/root/autodl-tmp/checkpoints/Evo1_LIBERO` 与 `/root/autodl-tmp/checkpoints/Evo1_MetaWorld`。
+  - Conda 环境存在：`/root/autodl-tmp/miniforge3/envs/Evo1` 与 `/root/autodl-tmp/envs/libero`。
+  - 最新 LIBERO smoke 产物位于 `/root/autodl-tmp/evo1_runs/libero_smoke_sync_20260611_092804`；记录为 1 episode，结果 `0/1 Fail (max_steps_exhausted)`，Evo1 server 已验证能加载 checkpoint 并返回 action chunk。
 - 下载源说明：
   - 服务器部署时曾按环境建议使用 Hugging Face mirror 加速模型/assets 下载。
   - 后续不再修改全局下载源；如需临时加速，应限制在单条命令或单个环境变量内，避免影响国内资源下载。
